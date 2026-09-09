@@ -1,0 +1,17 @@
+```html
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="manifest.json"><title>KITTRA NINJA</title>
+<style>body{background:#000;color:#0f0;font-family:monospace;text-align:center}button{width:90%;padding:22px;margin:12px;font-size:19px;background:#111;color:#0f0;border:2px solid #0f0;border-radius:12px} #result{border:1px solid #0f0;margin:10px;padding:10px;white-space:pre-wrap;text-align:left}</style>
+</head><body>
+<h1>🔒 KITTRA NINJA V1</h1>
+<p>VAULT: KvM-ABJ-5Sep2026 ACTIF</p>
+<button onclick="call('tx')">📊 1. TRANSACTIONS</button>
+<button onclick="call('security')">🛡️ 2. SÉCURITÉ</button>
+<button onclick="call('brain')">🧠 3. CERVEAU / APPRENTISSAGE</button>
+<div id="result">Clique un bouton...</div>
+<script>
+async function call(t){ const r=await fetch('/api/'+t); const j=await r.json(); document.getElementById('result').innerText=JSON.stringify(j,null,2); }
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script></body></html>
+```
