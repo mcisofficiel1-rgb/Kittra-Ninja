@@ -14,7 +14,11 @@ const CONFIG = {
 };
 
 const client = new RestClientV5({ key: CONFIG.KITTRANINJATRADE_KEY, secret: CONFIG.KITTRANINJATRADE_SECRET });
-const ws = new WebsocketClient({ key: CONFIG.KITTRANINJATRADE_KEY, secret: CONFIG.KITTRANINJATRADE_SECRET });
+const ws = new WebsocketClient({ 
+  market: 'v5',
+  key: CONFIG.KITTRANINJATRADE_KEY, 
+  secret: CONFIG.KITTRANINJATRADE_SECRET 
+});
 const tg = new TelegramBot(CONFIG.TELEGRAM);
 
 let coffre = 0;
