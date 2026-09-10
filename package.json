@@ -1,8 +1,9 @@
 {
-  "name": "kittra-v1",
-  "version": "1.0.0",
-  "description": "KITTRA NINJA V1 - Bot Bybit",
+  "name": "kittra-ninja",
+  "version": "12.0.0",
+  "description": "KITTRA NINJA V12 - Bot Bybit Anti-Dormeur",
   "main": "kittra.js",
+  "engines": { "node": "18.x" },
   "scripts": {
     "start": "node kittra.js"
   },
