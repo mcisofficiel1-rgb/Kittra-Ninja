@@ -1,17 +1,35 @@
-```html
-<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="manifest.json"><title>KITTRA NINJA</title>
-<style>body{background:#000;color:#0f0;font-family:monospace;text-align:center}button{width:90%;padding:22px;margin:12px;font-size:19px;background:#111;color:#0f0;border:2px solid #0f0;border-radius:12px} #result{border:1px solid #0f0;margin:10px;padding:10px;white-space:pre-wrap;text-align:left}</style>
-</head><body>
-<h1>🔒 KITTRA NINJA V1</h1>
-<p>VAULT: KvM-ABJ-5Sep2026 ACTIF</p>
-<button onclick="call('tx')">📊 1. TRANSACTIONS</button>
-<button onclick="call('security')">🛡️ 2. SÉCURITÉ</button>
-<button onclick="call('brain')">🧠 3. CERVEAU / APPRENTISSAGE</button>
-<div id="result">Clique un bouton...</div>
+<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><link rel="manifest" href="manifest.json"><title>KITTRA V5 SCANNER</title>
+<style>body{background:#000;color:red;text-align:center;font-family:monospace;margin:0}#eye{width:150px;height:150px;margin:15px auto;background:radial-gradient(circle,#f00 20%,#000033 70%);border-radius:50%;box-shadow:0 0 30px red;animation:pulse 1.2s infinite}button{width:92%;padding:18px;margin:8px;background:#111;color:#f00;border:2px solid #f00;border-radius:12px;font-weight:bold;font-size:17px}#out{background:#050000;border:1px solid red;padding:12px;margin:10px;min-height:130px;color:#0f8;text-align:left;white-space:pre-wrap;font-size:13px}@keyframes pulse{50%{box-shadow:0 0 60px red}}</style></head><body>
+<div id="eye" onclick="playScanner()"></div><h1>KITTRA V5 NINJA</h1><p style="color:#0f8">CLIQUE L'OEIL = SCANNER KITT</p>
+<button onclick="do1()">📊 1. TRANSACTIONS</button>
+<button onclick="do2()">🛡️ 2. SÉCURITÉ NINJA</button>
+<button onclick="do3()">🧠 3. APPRENTISSAGE</button>
+<div id="out">KITT 2008 S1E07 scanner prêt...</div>
 <script>
-async function call(t){ const r=await fetch('/api/'+t); const j=await r.json(); document.getElementById('result').innerText=JSON.stringify(j,null,2); }
-if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+let audioCtx=null;
+function playScanner(){
+  if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  // Son WOU-WOU de KITT
+  let osc=audioCtx.createOscillator(); let gain=audioCtx.createGain();
+  osc.type='sawtooth'; osc.frequency.value=120;
+  gain.gain.value=0.3;
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start();
+  // Effet wou-wou
+  let t=audioCtx.currentTime;
+  osc.frequency.linearRampToValueAtTime(400, t+0.3);
+  osc.frequency.linearRampToValueAtTime(120, t+0.6);
+  osc.frequency.linearRampToValueAtTime(400, t+0.9);
+  gain.gain.linearRampToValueAtTime(0, t+1);
+  osc.stop(t+1);
+  document.getElementById('eye').style.animationDuration='0.1s';
+  setTimeout(()=>document.getElementById('eye').style.animationDuration='1.2s',1000);
+}
+let voice=null; speechSynthesis.onvoiceschanged=()=>{voice=speechSynthesis.getVoices().find(v=>v.lang.includes('fr'))};
+function speak(t){speechSynthesis.cancel();let m=new SpeechSynthesisUtterance(t);m.voice=voice;m.lang='fr-FR';m.rate=0.82;m.pitch=0.45;speechSynthesis.speak(m); playScanner();}
+async function do1(){playScanner();let r=await fetch('/api/transactions');let j=await r.json();document.getElementById('out').innerText=`TRANSACTIONS:\nPrincipal: ${j.principal} USDT\nCoffre: ${j.coffre}\nWallet: ${j.wallet_kittra}\nPositions: ${JSON.stringify(j.positions)}`;speak(`Transactions actives. Principal ${j.principal}. Coffre ${j.coffre}.`)}
+async function do2(){playScanner();let r=await fetch('/api/securite');let j=await r.json();document.getElementById('out').innerText=`SECURITE:\nRadar: ${j.radar}\nVault: ${j.vault}\nKill-Switch: ${j.kill_switch}`;speak(`Sécurité Ninja active. Radar vingt quatre sur vingt quatre.`)}
+async function do3(){playScanner();let r=await fetch('/api/brain');let j=await r.json();document.getElementById('out').innerText=`CERVEAU:\n${j.niveau}\nGains:${j.memoire.gains} Pertes:${j.memoire.pertes}\n${j.autonome}`;speak(`Niveau ${j.memoire.niveau}. Mode autonome.`)}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js')}
+window.onload=()=>setTimeout(()=>{playScanner();setTimeout(()=>speak("Système KITT deux mille huit complet activé Gardien. Scanner sonore opérationnel."),800)},1000);
 </script></body></html>
-```
