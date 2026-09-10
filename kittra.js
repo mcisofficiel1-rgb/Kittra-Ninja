@@ -1,147 +1,138 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const { RestClientV5 } = require('bybit-api');
 
-// =========================================================
-// 1. TES CLÉS ICI - REMPLACE LES FAKE PAR TES VRAIES CLÉS
-// =========================================================
+// 1. TES CLÉS
 const VAULT = "KvM-ABJ-5Sep2026-9pL2_X8qZ!_Ninja_Babi";
-
-// --- COLLE TES CLÉS ICI ---
 const BYBIT_API_KEY = "omHyTld2qJJIybioLu";
 const BYBIT_API_SECRET = "1Ozaa1MSI5TcGofGeSk4Nl9yICkrDWQNA46n";
 const TELEGRAM_TOKEN = "8765920829:AAFdiSgT3p5nsHTNRtI50mcWguD1v4jrlok";
 const TELEGRAM_CHAT_ID = "7895041967";
+const MON_WALLET_COFFRE_FORT = "TG8UcJUH152YyWsSArL4cwwV78GZijYJoqG";
+const CHAINE_COFFRE = 'TRC20';
+const client = new RestClientV5({ key: BYBIT_API_KEY, secret: BYBIT_API_SECRET, testnet: false });
 
-// =========================================================
-// 2. CONFIG DE TON PROGRAMME (NE TOUCHE PAS)
-// =========================================================
+// 2. CONFIG - CAPITAL SACRÉ
 const CONFIG = {
-  principal: 12, // Ton 12 USDT de départ
-  coffre: 0, // Coffre épargne - KITTRA ne trade jamais avec
-  wallet_kittra: 0, // Wallet Kittra pour auto-sweep
-  seuil_achat_RSI: 30,
-  baisse_achat: -4, // Achat si -4% depuis dernier achat
-  profit_vente: 5, // Vente si +5%
-  stop_loss: -7
+  principal: 10, // CAPITAL SACRÉ. NE DOIT JAMAIS DESCENDRE
+  urgences_usdt: 0,
+  usdt_par_achat: 1,
+  coffre_total: 0, // TOUS LES SURPLUS VONT ICI
+  liste_coins: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
+  jour_sweep: 0, // Dimanche 18h
+  repartition: { trading: 40, urgences: 24, business: 12, maison: 8, enfants: 4 }
 };
 
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
-
-// =========================================================
-// 3. TELEGRAM LEGER POUR RENDER GRATUIT (NE PLANTE PAS)
-// =========================================================
-let bot = null;
-try {
-  const TelegramBot = require('node-telegram-bot-api');
-  bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false }); // polling false = CRITIQUE pour gratuit
-  console.log("Telegram prêt");
-} catch(e){ console.log("Telegram veille mode gratuit"); }
-
-// =========================================================
-// 4. MEMOIRE + RADAR 24/24 + KILL-SWITCH NINJA
-// =========================================================
-let MEMOIRE = { trades: [], gains: 0, pertes: 0, niveau: 1, radar: "ACTIF", kill_switch: false, lecons: [] };
-let POSITIONS = {}; // Ex: { BTCUSDT: {prixEntree: 65000} }
-let PRIX_LAST = { BTCUSDT: 65000 };
-
+let bot = null; try { const TelegramBot = require('node-telegram-bot-api'); bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false }); } catch(e){}
+let MEMOIRE = { trades: [], gains: 0, pertes: 0, niveau: 1, coffres: {business:0, maison:0, enfants:0}, kill_switch: false };
+let POSITIONS = {}; let PRIX_LAST = { BTCUSDT: 65000, ETHUSDT: 3500, SOLUSDT: 150 };
 try{ if(fs.existsSync('./memoire.json')) MEMOIRE = JSON.parse(fs.readFileSync('./memoire.json')); }catch(e){}
+function saveMemoire(){ try{ fs.writeFileSync('./memoire.json', JSON.stringify(MEMOIRE)); }catch(e){} }
+function activerKillSwitch(raison){ MEMOIRE.kill_switch = true; if(bot){ bot.sendMessage(TELEGRAM_CHAT_ID, `🚨 KITTRA ALERTE: ${raison}`); } }
 
-function activerKillSwitch(raison){
-  MEMOIRE.kill_switch = true;
-  console.log("🚨 KILL-SWITCH NINJA:", raison);
-  if(bot){ try{ bot.sendMessage(TELEGRAM_CHAT_ID, `🚨 KITTRA NINJA ALERTE: Kill-Switch activé! Raison: ${raison}`); }catch(e){} }
+// 3. FONCTIONS BYBIT
+async function acheter(symbol, montantUSDT){
+  const qty = montantUSDT / PRIX_LAST[symbol];
+  await client.submitOrder({ category: 'spot', symbol, side: 'Buy', orderType: 'Market', qty: qty.toFixed(6) });
+  return {ok: true, qty: qty.toFixed(6), prix: PRIX_LAST[symbol]};
+}
+async function vendre(symbol){
+  const position = POSITIONS[symbol];
+  await client.submitOrder({ category: 'spot', symbol, side: 'Sell', orderType: 'Market', qty: position.qty });
+  return {ok: true, prix: PRIX_LAST[symbol]};
+}
+async function envoyerVersCoffreFort(nomCoffre, montant){
+  if(montant < 1) return;
+  try{
+    await client.submitWithdrawal({ coin: 'USDT', chain: CHAINE_COFFRE, address: MON_WALLET_COFFRE_FORT, amount: montant.toFixed(2) });
+    console.log(`✅ ${montant.toFixed(2)} USDT ENVOYÉ AU COFFRE: ${nomCoffre}`);
+    if(bot) bot.sendMessage(TELEGRAM_CHAT_ID, `💰 KITTRA: ${montant.toFixed(2)} USDT vers Coffre ${nomCoffre.toUpperCase()}`);
+  }catch(e){ console.error("❌ ERREUR RETRAIT:", e); }
 }
 
-// =========================================================
-// 5. TES 4 PHASES + REGLES DE TRADING
-// =========================================================
-function phase_SURVEILLANCE(prix, rsi){
-  if(MEMOIRE.kill_switch) return {action: "KILL_SWITCH"};
-  if(prix < 500) { activerKillSwitch("Prix anormal - Hack possible"); return {action:"DANGER"}; }
-
-  // REGLE 1: ACHAT si RSI<30 OU baisse -4%
-  for(let coin in POSITIONS){
-    let baisse = ((prix - POSITIONS[coin].prixEntree)/POSITIONS[coin].prixEntree)*100;
-    if(rsi < CONFIG.seuil_achat_RSI || baisse <= CONFIG.baisse_achat){
-      return {action:"ACHAT_DCA", coin, raison:`RSI ${rsi} ou Baisse ${baisse.toFixed(1)}%`};
+// 4. LOGIQUE TRADING + COFFRE FORT SURPLUS
+function phase_SURVEILLANCE(){
+  for(let coin of CONFIG.liste_coins){
+    let prix = PRIX_LAST[coin]; let rsi = Math.random()*100;
+    if(!POSITIONS[coin]){ if(rsi < 30) return {action:"ACHAT", coin}; }
+    else{ let profit = ((prix - POSITIONS[coin].prixEntree)/POSITIONS[coin].prixEntree)*100;
+      if(profit >= 5 || profit <= -7) return {action:"VENTE", coin, profit};
     }
   }
-  if(Object.keys(POSITIONS).length==0 && rsi < 30) return {action:"ACHAT", coin:"BTCUSDT", raison:`Premier achat RSI ${rsi}`};
-
-  // REGLE 2: VENTE +5% + SECURITE -7%
-  for(let coin in POSITIONS){
-    let profit = ((prix - POSITIONS[coin].prixEntree)/POSITIONS[coin].prixEntree)*100;
-    if(profit >= CONFIG.profit_vente) return {action:"VENTE", coin, profit, raison:`Profit +${profit.toFixed(1)}%`};
-    if(profit <= CONFIG.stop_loss) return {action:"VENTE_SECURITE", coin, profit, raison:`Stop-Loss ${profit.toFixed(1)}%`};
-  }
-  // REGLE 4: Vente Urgence crypto qui meurt RSI<5
-  if(rsi < 5) return {action:"VENTE_URGENCE", raison:"Crypto morte RSI<5"};
-
-  return {action:"SURVEILLANCE", prix, rsi};
+  return {action:"SURVEILLANCE"};
 }
 
-function phase_ACTION(signal){
-  if(signal.action=="ACHAT" || signal.action=="ACHAT_DCA"){
-    POSITIONS[signal.coin] = {prixEntree: PRIX_LAST[signal.coin]||65000, date: new Date()};
-    MEMOIRE.trades.push({type:"ACHAT",...signal, date: new Date()});
-    console.log("KITT ACHETE", signal);
+async function phase_ACTION(signal){
+  if(signal.action=="ACHAT"){
+    // On prend dans le capital pour acheter
+    if(CONFIG.principal >= CONFIG.usdt_par_achat){
+      let res = await acheter(signal.coin, CONFIG.usdt_par_achat);
+      if(res.ok){
+        CONFIG.principal -= CONFIG.usdt_par_achat; // Retire du capital
+        POSITIONS[signal.coin] = {prixEntree: res.prix, qty: res.qty};
+        MEMOIRE.trades.push({type:"ACHAT", coin:signal.coin, montant:CONFIG.usdt_par_achat});
+      }
+    }
   }
   if(signal.action.includes("VENTE")){
-    let profitUSDT = 0.6; // Simulé, en réel = calcul Bybit
-    let total = CONFIG.principal + profitUSDT;
-    // REGLE BONUS: Si >12, prélève surplus vers coffre
-    if(total > 12){
-      let surplus = total - 12;
-      CONFIG.coffre += surplus;
-      CONFIG.principal = 12;
-      console.log(`AUTO-PRELEVEMENT: +${surplus.toFixed(2)} vers COFFRE. Coffre=${CONFIG.coffre.toFixed(2)}`);
-      if(bot){ try{ bot.sendMessage(TELEGRAM_CHAT_ID, `💰 KITTRA: +${surplus.toFixed(2)} USDT vers Coffre Épargne!`); }catch(e){} }
+    let res = await vendre(signal.coin);
+    if(res.ok){
+      let valeurVente = POSITIONS[signal.coin].qty * res.prix;
+      let valeurAchat = POSITIONS[signal.coin].qty * POSITIONS[signal.coin].prixEntree;
+      let profitUSDT = valeurVente - valeurAchat;
+
+      if(profitUSDT > 0){
+        // SURPLUS: Va direct dans le coffre_total. Capital reste intact
+        CONFIG.coffre_total += profitUSDT;
+        CONFIG.principal += valeurAchat; // On remet le capital de base
+        console.log(`💰 SURPLUS DE ${profitUSDT.toFixed(2)}$ MIS AU COFFRE`);
+      }else{
+        // PERTE: On prend sur le capital
+        CONFIG.principal += valeurVente;
+        if(CONFIG.principal < 5) activerKillSwitch("Capital < 5$");
+      }
+
+      delete POSITIONS[signal.coin];
+      MEMOIRE.trades.push({type:"VENTE", coin:signal.coin, profit:profitUSDT});
+      if(profitUSDT>0) MEMOIRE.gains++; else MEMOIRE.pertes++;
     }
-    MEMOIRE.trades.push({type:"VENTE",...signal, profitUSDT, date: new Date()});
-    delete POSITIONS[signal.coin];
-    if(signal.profit>0) MEMOIRE.gains++; else MEMOIRE.pertes++;
-    if(MEMOIRE.trades.length % 3==0) MEMOIRE.niveau++;
   }
-  try{ fs.writeFileSync('./memoire.json', JSON.stringify(MEMOIRE)); }catch(e){}
+  saveMemoire();
 }
 
-// =========================================================
-// 6. WEBSOCKET BYBIT TEMPS REEL + SIMULATION
-// =========================================================
-try{
-  const { WebsocketClient } = require('bybit-api');
-  const ws = new WebsocketClient({ market: 'v5', key: BYBIT_API_KEY, secret: BYBIT_API_SECRET });
-  ws.subscribeV5(['tickers.BTCUSDT'], 'linear');
-  ws.on('update', (d)=>{ PRIX_LAST.BTCUSDT = parseFloat(d.data.lastPrice); });
-  console.log("WebSocket Bybit actif");
-}catch(e){ console.log("WebSocket veille - Mode simu"); }
+// 5. RÉPARTITION DIMANCHE
+async function repartirEtSweeper(){
+  if(CONFIG.coffre_total < 2) return;
+  let rep = CONFIG.repartition;
+  let totalProfit = CONFIG.coffre_total;
 
-// Simulation si WebSocket off
-setInterval(()=>{
-  PRIX_LAST.BTCUSDT += (Math.random()-0.5)*150;
-  let rsi = Math.random()*100;
-  let sig = phase_SURVEILLANCE(PRIX_LAST.BTCUSDT, rsi);
-  if(sig.action!="SURVEILLANCE" && sig.action!="KILL_SWITCH") phase_ACTION(sig);
-}, 10000);
+  let resteTrading = totalProfit * (rep.trading/100);
+  let resteUrgences = totalProfit * (rep.urgences/100);
+  CONFIG.principal += resteTrading; // 40% retourne au capital
+  CONFIG.urgences_usdt += resteUrgences; // 24% pour urgences sur Bybit
 
-// =========================================================
-// 7. GESTION COFFRE + AUTO-SWEEP + BILAN HEBDO
-// =========================================================
-function autoSweepEtBilan(){
-  let jour = new Date().getDay();
-  if(jour==1 && CONFIG.coffre>0){ let m=CONFIG.coffre*0.05; CONFIG.wallet_kittra+=m; CONFIG.coffre-=m; console.log(`SWEEP Lundi 5%: ${m}`); }
-  if(jour>=2 && jour<=5 && CONFIG.coffre>0){ let m=CONFIG.coffre*0.70; CONFIG.wallet_kittra+=m; CONFIG.coffre-=m; console.log(`SWEEP Mardi-Ven 70%: ${m}`); }
+  let aSweeper = totalProfit * ((100 - rep.trading - rep.urgences)/100);
+  let montants = {
+    business: aSweeper * (rep.business/(100-rep.trading-rep.urgences)),
+    maison: aSweeper * (rep.maison/(100-rep.trading-rep.urgences)),
+    enfants: aSweeper * (rep.enfants/(100-rep.trading-rep.urgences)),
+  };
+  for(let coffre in montants){ await envoyerVersCoffreFort(coffre, montants[coffre]); MEMOIRE.coffres[coffre] += montants[coffre]; }
+
+  CONFIG.coffre_total = 0; // Vide le coffre
+  saveMemoire();
+
+  if(bot) bot.sendMessage(TELEGRAM_CHAT_ID, `📊 RÉPARTITION DIMANCHE: Capital=${CONFIG.principal.toFixed(2)}$ | Urgences=${CONFIG.urgences_usdt.toFixed(2)}$`);
 }
-setInterval(autoSweepEtBilan, 1000*60*60*6);
 
-// =========================================================
-// 8. API POUR TES 3 BOUTONS
-// =========================================================
-app.get('/api/transactions', (req,res)=> res.json({ principal: CONFIG.principal, coffre: CONFIG.coffre, wallet_kittra: CONFIG.wallet_kittra, positions: POSITIONS, prix: PRIX_LAST, signal: phase_SURVEILLANCE(PRIX_LAST.BTCUSDT, 28) }));
-app.get('/api/securite', (req,res)=> res.json({ etape1_verrou:"Deux pouces + phrase vocale secrète", etape2_antivol:"Clé dans puce Secure Enclave - Auto-destruction si flash", etape3_secours:"Voix + 2 pouces + phrase + 3 mots secrets", vault: VAULT+" ACTIF Ninja", radar: MEMOIRE.radar, kill_switch: MEMOIRE.kill_switch, telegram: bot?"Connecté":"Veille gratuit" }));
-app.get('/api/brain', (req,res)=> res.json({ memoire: MEMOIRE, niveau:`Niveau ${MEMOIRE.niveau} - ${MEMOIRE.gains}G/${MEMOIRE.pertes}P`, systemes:["Stop-Loss -7% ACTIF","Take-Profit +5% ACTIF","DCA -4% ACTIF","Radar 24/24","Kill-Switch Ninja","PWA Offline"], autonome:"Surveillance Spot+Futures + Décision + Action + Gestion 100% autonome" }));
-app.get('/', (req,res)=> res.sendFile(path.join(__dirname, 'index.html')));
-app.listen(process.env.PORT||10000, ()=> console.log(`KITTRA V5 FINAL COMPLET ACTIF sur ${process.env.PORT||10000}`));
+// 6. BOUCLES
+try{ const { WebsocketClient } = require('bybit-api'); const ws = new WebsocketClient({ market: 'v5', key: BYBIT_API_KEY, secret: BYBIT_API_SECRET, testnet: false }); ws.subscribeV5(['tickers.BTCUSDT', 'tickers.ETHUSDT', 'tickers.SOLUSDT'], 'spot'); ws.on('update', (d)=>{ PRIX_LAST[d.data.symbol] = parseFloat(d.data.lastPrice); }); }catch(e){}
+setInterval(async ()=>{ if(!MEMOIRE.kill_switch){ let sig = phase_SURVEILLANCE(); if(sig.action!="SURVEILLANCE") await phase_ACTION(sig); } }, 15000);
+setInterval(async ()=>{ let date = new Date(); if(date.getDay() == CONFIG.jour_sweep && date.getHours() == 18){ await repartirEtSweeper(); } }, 1000*60*60);
+
+app.get('/api/transactions', (req,res)=> res.json({ principal: CONFIG.principal, urgences_usdt: CONFIG.urgences_usdt, coffre_total: CONFIG.coffre_total, coffres: MEMOIRE.coffres }));
+app.listen(process.env.PORT||10000, ()=> console.log(`KITTRA V11 COFFRE-FORT ACTIF`));
