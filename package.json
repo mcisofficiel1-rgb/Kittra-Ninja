@@ -1,15 +1,17 @@
 {
   "name": "kittra-ninja",
-  "version": "12.0.0",
-  "description": "KITTRA NINJA V12 - Bot Bybit Anti-Dormeur",
+  "version": "13.0.0",
+  "description": "KITTRA NINJA V13 - Bot Bybit Anti-Dormeur - MASTER Ninja_Babi",
   "main": "kittra.js",
-  "engines": { "node": "18.x" },
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "start": "node kittra.js"
   },
   "dependencies": {
-    "bybit-api": "^3.10.2",
-    "node-telegram-bot-api": "^0.61.0",
-    "express": "^4.18.2"
+    "bybit-api": "^3.11.1",
+    "node-telegram-bot-api": "^0.66.0",
+    "express": "^4.21.1"
   }
 }
