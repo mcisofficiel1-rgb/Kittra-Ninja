@@ -1,2 +1,2 @@
 # Kittra-Ninja
-KITTRA NINJA V1 
+KITTRA NINJA  
