@@ -1,17 +1,12 @@
 {
   "name": "kittra-v16-1-babi",
   "version": "16.1.0",
-  "description": "Kittra Ninja Babi - 7 coffres Render sde123@",
   "main": "kittra.js",
   "scripts": {
     "start": "node kittra.js"
   },
   "dependencies": {
     "bybit-api": "^3.10.0",
-    "dotenv": "^16.4.5",
-    "node-fetch": "^2.6.9"
-  },
-  "engines": {
-    "node": "20.x"
+    "dotenv": "^16.4.5"
   }
 }
