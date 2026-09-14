@@ -1,6 +1,6 @@
 // =========================================================
 // KITTRA DRONE v16.1 FURTIF FUTURISTE - INTEGRALE A+B+C
-// Ninja Babi - Stealth, Intelligent, Discret
+// VERSION CORRIGEE - SANS BUG ROUGE
 // =========================================================
 require('http').createServer((req,res) => res.end('Drone Stealth LIVE')).listen(process.env.PORT || 10000);
 
@@ -13,11 +13,11 @@ let CONFIG = {
   coffre_total: 0,
   urgences: 0,
   TOP_N: 10,
-  TAKE_PROFIT: 0.8, // +0.8% on mange petit
-  STOP_LOSS: -1.2, // -1.2% on coupe vite
-  MIN_PROFIT_FURTIF: 0.1,// même +0.1% on sécurise si danger
-  COOLDOWN: 180, // 3 min entre 2 trades même coin
-  jour_sweep: 0, // Dimanche
+  TAKE_PROFIT: 0.8,
+  STOP_LOSS: -1.2,
+  MIN_PROFIT_FURTIF: 0.1,
+  COOLDOWN: 180,
+  jour_sweep: 0,
   heure_sweep: 18,
   repartition: { trading: 40, urgences: 24, business: 12, maison: 8, enfants: 4 }
 };
@@ -36,9 +36,9 @@ let MEMOIRE = { trades:[], stats:{}, deadCoins:[], vuCoins:[], coffres:{business
 try{ if(fs.existsSync('./memoire.json')) MEMOIRE = JSON.parse(fs.readFileSync('./memoire.json')); }catch(e){}
 function save(){ try{ fs.writeFileSync('./memoire.json', JSON.stringify(MEMOIRE, null, 2)); }catch(e){} }
 
-let PRIX={}, HISTO={}, POS={}, SCORE={}, FEAR=50, TENDANCE={}, LAST_TRADE={}, LAST_PRICE=Date.now();
+let PRIX={}, HISTO={}, POS={}, SCORE={}, FEAR=50, TENDANCE={}, LAST_TRADE={};
 
-// --- TELEGRAM FURTIF (message court) ---
+// --- TELEGRAM FURTIF ---
 async function tg(msg){
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chat = process.env.TELEGRAM_CHAT_ID;
@@ -59,7 +59,7 @@ async function getFear(){
     let j = await r.json();
     FEAR = parseInt(j.data[0].value);
     if(FEAR <= 20) await tg(`😱 PEUR ${FEAR} - Drone en pause`);
-    if(FEAR >= 85) await tg(`🤑 GREED ${FEAR} - Mode sécurisation +0.1%`);
+    if(FEAR >= 85) await tg(`🤑 GREED ${FEAR} - Securisation +0.1%`);
   }catch(e){ FEAR = 50; }
 }
 
@@ -80,18 +80,13 @@ async function analyse1H(coin){
   }catch(e){ return {tendance:"NEUTRE", chute:0}; }
 }
 
-// --- CERVEAU B : LISTINGS + IA MARCHE ---
+// --- CERVEAU B : LISTINGS + IA ---
 async function scanMarche(){
   try{
     let tickers = await client.getTickers({category:'spot'});
     let top = tickers.result.list.filter(t=>t.symbol.endsWith('USDT') && parseFloat(t.volume24h) > 500000)
-     .sort((a,b)=>parseFloat(b.volume24h)-parseFloat(a.volume24h)).slice(0,30);
+    .sort((a,b)=>parseFloat(b.volume24h)-parseFloat(a.volume24h)).slice(0,30);
 
-    // IA: choisit les meilleurs selon score
-    let nb = CONFIG.principal < 20? 3 : CONFIG.principal < 100? 5 : 8;
-    let meilleurs = top.filter(t=>!MEMOIRE.deadCoins.includes(t.symbol) && (SCORE[t.symbol]||50) > 20).slice(0,nb).map(t=>t.symbol);
-
-    // Detection nouveaux listings
     for(let t of tickers.result.list){
       if(!t.symbol.endsWith('USDT')) continue;
       if(MEMOIRE.vuCoins.includes(t.symbol) || MEMOIRE.deadCoins.includes(t.symbol)) continue;
@@ -100,13 +95,11 @@ async function scanMarche(){
         MEMOIRE.vuCoins.push(t.symbol); if(MEMOIRE.vuCoins.length>500) MEMOIRE.vuCoins.shift(); save();
         if(FEAR < 75){
           let a = await analyse1H(t.symbol);
-          if(a.tendance.includes("HAUSSE") &&!meilleurs.includes(t.symbol)){
-            meilleurs.unshift(t.symbol);
-            await tg(`🆕 Listing validé ${t.symbol} Vol ${(vol/1e6).toFixed(1)}M`);
+          if(a.tendance.includes("HAUSSE")){
+            await tg(`🆕 Listing valide ${t.symbol} Vol ${(vol/1e6).toFixed(1)}M`);
           }
         }
       }
-      // Coin mourant
       if(change < -30 && parseFloat(t.volume24h) < 1000000 &&!MEMOIRE.deadCoins.includes(t.symbol)){
         MEMOIRE.deadCoins.push(t.symbol); save();
         if(POS[t.symbol]) await vendre(t.symbol, true);
@@ -116,7 +109,7 @@ async function scanMarche(){
   }catch(e){}
 }
 
-// --- IA LEARNING ---
+// --- IA ---
 function rsi(coin){
   let p = HISTO[coin]; if(!p || p.length < 15) return null;
   let g=0,l=0; for(let i=1;i<p.length;i++){ let d=p[i]-p[i-1]; if(d>0) g+=d; else l-=d; }
@@ -146,6 +139,7 @@ async function acheter(sym){
     if(bougie.tendance.includes("CHUTE") || bougie.tendance.includes("KRACH")) return;
     if((SCORE[sym]||50) < 40) return;
     let montant = taillePos(sym); if(montant < 1 || CONFIG.principal < montant) return;
+    if(!PRIX[sym]) return;
     let qty = montant / PRIX[sym];
     await client.submitOrder({ category:'spot', symbol:sym, side:'Buy', orderType:'Market', qty:qty.toFixed(6) });
     CONFIG.principal -= montant;
@@ -175,7 +169,7 @@ async function vendre(sym, force=false){
   }catch(e){}
 }
 
-// --- COFFRE + REPARTITION DIMANCHE 18H ---
+// --- COFFRE ---
 async function envoyerCoffre(nom, montant){
   if(montant < 1.1){ MEMOIRE.coffres[nom]=(MEMOIRE.coffres[nom]||0)+montant; save(); return; }
   try{
@@ -196,23 +190,23 @@ async function repartir(){
   CONFIG.coffre_total=0; save(); await tg(msg);
 }
 
-// --- WEBSOCKET FURTIF (jitter aléatoire) ---
+// --- WEBSOCKET CORRIGE ---
 function startWS(){
   const ws=new WebsocketClient({ market:'v5', key:process.env.BYBIT_KEY, secret:process.env.BYBIT_SECRET });
   ws.subscribeV5(['BTCUSDT','ETHUSDT','SOLUSDT'].map(c=>`tickers.${c}`), 'spot');
   ws.on('update', d=>{
     if(!d.data?.symbol) return;
-    PRIX[d.data.symbol]=parseFloat(d.data.lastPrice);
-    if(!HISTO[d.data.symbol]) HISTO[d.data.symbol]=[];
-    HISTO[d.data.symbol].push(Prix[d.data.symbol] || PRIX[d.data.symbol]);
-    if(HISTO[d.data.symbol].length>100) HISTO[d.data.symbol].shift();
-    LAST_PRICE=Date.now();
+    let sym = d.data.symbol;
+    PRIX[sym]=parseFloat(d.data.lastPrice);
+    if(!HISTO[sym]) HISTO[sym]=[];
+    HISTO[sym].push(PRIX[sym]);
+    if(HISTO[sym].length>100) HISTO[sym].shift();
   });
   ws.on('close', ()=> setTimeout(startWS, 5000 + Math.random()*3000));
 }
 startWS();
 
-// --- BOUCLES FURTIVES avec jitter ---
+// --- BOUCLES FURTIVES ---
 setInterval(async()=>{ if(MEMOIRE.kill) return; for(let c of Object.keys(PRIX)){ await acheter(c); await vendre(c); } }, 15000 + Math.random()*5000);
 setInterval(scanMarche, 120000 + Math.random()*30000);
 setInterval(getFear, 600000);
@@ -220,4 +214,4 @@ setInterval(async()=>{ let d=new Date(); if(d.getDay()===CONFIG.jour_sweep && d.
 
 scanMarche(); getFear();
 console.log("🛸 DRONE FURTIF V16.1 ACTIF - Mode discret intelligent");
-tg(`🛸 Drone furtif démarré Cap ${CONFIG.principal}$ - Objectif +0.8% / -1.2%`);
+tg(`🛸 Drone furtif demarre Cap ${CONFIG.principal}$ - Objectif +0.8% / -1.2%`);
