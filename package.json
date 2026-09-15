@@ -1,12 +1,9 @@
 {
-  "name": "kittra-v16-1-babi",
-  "version": "16.1.0",
+  "name": "kittra-v17-3-ultime",
+  "version": "17.3.0",
   "main": "kittra.js",
-  "scripts": {
-    "start": "node kittra.js"
-  },
+  "scripts": { "start": "node kittra.js" },
   "dependencies": {
-    "bybit-api": "^3.10.0",
-    "dotenv": "^16.4.5"
+    "bybit-api": "^3.10.0"
   }
 }
