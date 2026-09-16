@@ -1,47 +1,72 @@
-# KITTRA V17.4 ULTIME NINJA - 100% REEL - PACKAGE UNIQUE FINAL
-# Lit kittra.json actuel + Connexion REELLE - ZERO DEMO
-import os, json, time, asyncio
+import os
+import json
+import time
+import threading
+from flask import Flask
 from pybit.unified_trading import HTTP
-from telegram import Bot
+import requests
 
-# 1. LIT TON kittra.json ACTUEL (on ne le touche pas, on le lit juste)
-try:
-    with open('kittra.json', 'r') as f:
-        config = json.load(f)
-    print(f"KITTRA {config['version']} CHARGE - MODE: {config['mode']}")
-    print(f"ENDPOINT REEL: {config['api_endpoint']} - DEMO: {config['demo']}")
-except:
-    print("kittra.json non trouve, on continue en mode REEL")
+# --- SERVEUR WEB POUR RENDER GRATUIT (NE PAS TOUCHER) ---
+app = Flask(__name__)
+@app.route('/')
+def home():
+    return "KITTRA-VAULT LIVE - REAL MONEY ACTIVE - BOT IS TRADING"
 
-# 2. CLES - Prises depuis RENDER (100% REEL)
-# Sur GitHub tu laisses les fausses, sur Render tu mettras les vraies
-API_KEY = os.getenv("BYBIT_API_KEY", "omHyIybio10")
-API_SECRET = os.getenv("BYBIT_API_SECRET", "1Ozaa14dx")
-TG_TOKEN = os.getenv("TG_TOKEN", "8765D4jrl12t")
-TG_ID = os.getenv("TG_ID", "9999")
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
-# 3. CONNEXION 100% REELLE VERIFIEE 100 FOIS
-# testnet=False = api.bybit.com = VRAI ARGENT - PAS api-testnet
-print("Connexion API: https://api.bybit.com - testnet=False = REEL PUR")
-client = HTTP(testnet=False, api_key=API_KEY, api_secret=API_SECRET)
+threading.Thread(target=run_web, daemon=True).start()
+# ---------------------------------------------------------
 
-# 4. VERIFIE TON VRAI 10.53$ + BOUCLE NINJA
-async def ninja_loop():
-    bot = Bot(token=TG_TOKEN)
+print("=== KITTRA NINJA ULTIME STARTING ===")
+
+# Charger la config
+with open('Kittra.json', 'r') as f:
+    config = json.load(f)
+
+print(f"MODE: {config['MODE']}")
+print(f"VAULT: {config['vault']['VAULT_NAME']} -> {config['vault']['VAULT_ADDRESS']}")
+
+# Connexion Bybit REAL
+API_KEY = os.getenv("API_KEY")
+API_SECRET = os.getenv("API_SECRET")
+
+session = HTTP(
+    testnet=False,
+    api_key=API_KEY,
+    api_secret=API_SECRET
+)
+
+# Telegram
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+def send_telegram(msg):
+    try:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+    except Exception as e:
+        print(f"Telegram error: {e}")
+
+send_telegram(f"🥷 KITTRA {config['vault']['VAULT_NAME']} LIVE EN ARGENT REEL! Mode: {config['MODE']}")
+
+# Boucle de trading principale
+def trading_loop():
     while True:
         try:
-            # Lit ton VRAI solde UNIFIE
-            bal = client.get_wallet_balance(accountType="UNIFIED")
-            usdt = bal['result']['list'][0]['coin'][0]['walletBalance']
-            print(f"LOCK REEL: {usdt}$ - WALLET REEL: {usdt}$")
-
-            # Ici la logique V17.3 + V17.4 va acheter/vendre pour de vrai
-
+            # Exemple: Check balance
+            balance = session.get_wallet_balance(accountType="UNIFIED")
+            print(f"Balance check: OK - KITTRA VAULT ACTIF")
+            
+            # ICI TON LOGIC DE TRADING EXISTANT
+            # ... ton code de scalp ...
+            
+            time.sleep(60)  # scan chaque minute
         except Exception as e:
-            print(f"Erreur: {e}")
-            if "API key is invalid" in str(e):
-                print("ALERTE: Cle coupee par 2FA!")
-        time.sleep(10)
+            print(f"Error: {e}")
+            time.sleep(10)
 
+# Lancer le trading
 if __name__ == "__main__":
-    asyncio.run(ninja_loop())
+    trading_loop()
