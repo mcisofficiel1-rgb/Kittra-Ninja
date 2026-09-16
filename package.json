@@ -1,7 +1,7 @@
 {
   "name": "kittra-v17-3-ultimeai7",
   "version": "17.4.0",
-  "description": "KITTRA V17.4 ULTIME NINJA DOUBLE GUERRIER MOLO AUTO +0.01%",
+  "description": "KITTRA V17.4 ULTIME NINJA DOUBLE GUERRIER MOLO AUTO +0.01% 100% REEL",
   "main": "kittra.js",
   "scripts": {
     "start": "node kittra.js"
