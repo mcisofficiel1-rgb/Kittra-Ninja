@@ -1,23 +1,23 @@
 {
-  "BOT_NAME": "KITTRA-NINJA-ULTIME",
-  "MODE": "MAINNET",
-  "EXCHANGE": "BYBIT",
-  "API_URL": "https://api.bybit.com",
-  "MARKET": "SPOT_REAL",
-  "testnet": false,
-  "trading": {
-    "enabled": true,
-    "pair": "BTC/USDT",
-    "amount_usdt": 10,
-    "strategy": "SCALP_NINJA"
-  },
-  "vault": {
-    "VAULT_NAME": "KITTRA-VAULT",
-    "VAULT_ADDRESS": "TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG",
-    "auto_save_percent": 50,
-    "enabled": true
-  },
-  "telegram": {
-    "enabled": true
-  }
+  "BOT_NAME": "KITTRA-NINJA-ULTIME",
+  "MODE": "MAINNET",
+  "EXCHANGE": "BYBIT",
+  "API_URL": "https://api.bybit.com",
+  "MARKET": "SPOT_REAL",
+  "testnet": false,
+  "trading": {
+    "enabled": true,
+    "pair": "BTC/USDT",
+    "amount_usdt": 10,
+    "strategy": "SCALP_NINJA"
+  },
+  "vault": {
+    "VAULT_NAME": "KITTRA-VAULT",
+    "VAULT_ADDRESS": "TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG",
+    "auto_save_percent": 50,
+    "enabled": true
+  },
+  "telegram": {
+    "enabled": true
+  }
 }
