@@ -1,9 +1,17 @@
 {
-  "name": "kittra-v17-3-ultime",
-  "version": "17.3.0",
+  "name": "kittra-v17-3-ultimeai7",
+  "version": "17.4.0",
+  "description": "KITTRA V17.4 ULTIME NINJA DOUBLE GUERRIER MOLO AUTO +0.01%",
   "main": "kittra.js",
-  "scripts": { "start": "node kittra.js" },
+  "scripts": {
+    "start": "node kittra.js"
+  },
   "dependencies": {
-    "bybit-api": "^3.10.0"
+    "bybit-api": "^3.10.5",
+    "node-telegram-bot-api": "^0.64.0",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": "20.x"
   }
 }
