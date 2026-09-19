@@ -18,8 +18,9 @@ WALLET_EXTERNE="TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG"
 session=HTTP(testnet=False, api_key=API_KEY, api_secret=API_SECRET) if API_KEY else None
 
 CONFIG={"principal":10.3443,"principal_securite":0.30,"coffre_total":0,"urgences_lock":0,"wallet_perso":{"bonus":0},"memoire":{"business":0,"maison":0},"repartition":{"trading":40,"urgences":24,"business":12,"maison":8,"enfants":4},"stats":{}}
-AUTO_COINS=["BTCUSDT","SOLUSDT","ETHUSDT","TRXUSDT","BNBUSDT","XRPUSDT","AVAXUSDT","DOGEUSDT"]
-MIN_NOTIONAL={"BTCUSDT":5.0,"SOLUSDT":5.0,"ETHUSDT":5.0,"AVAXUSDT":5.0,"BNBUSDT":5.0,"XRPUSDT":1.0,"TRXUSDT":1.0,"DOGEUSDT":1.0}
+# OPTIMISÉ 1.10$ - SEULEMENT COINS QUI ACCEPTENT 1.10$
+AUTO_COINS=["DOGEUSDT","TRXUSDT","XRPUSDT","BNBUSDT"]
+MIN_NOTIONAL={"BNBUSDT":5.0,"XRPUSDT":1.0,"TRXUSDT":1.0,"DOGEUSDT":1.0}
 price_history={}; positions={}; KITTRA_FILE="Kittra.json"
 
 def load():
@@ -27,6 +28,7 @@ def load():
     try:
         with open(KITTRA_FILE,"r") as f:
             d=json.load(f); positions=d.get("positions",{}); CONFIG["stats"]=d.get("stats",{})
+            CONFIG["coffre_total"]=d.get("coffre",0)
     except: pass
 def save():
     with open(KITTRA_FILE,"w") as f: json.dump({"positions":positions,"stats":CONFIG["stats"],"coffre":CONFIG["coffre_total"]}, f)
@@ -80,29 +82,24 @@ def peut_trader(bal, usdt, price, sym):
 def trading_loop():
     time.sleep(5); load()
     bal=get_real_balance()
-    if bal: send_tg(f"🧠 V19.2 MOLO ACHAT<Vente LIVE!\nSolde:{bal:.4f}$ Garde:{CONFIG['principal']*0.30:.2f}$ Dispo:{bal-CONFIG['principal']*0.30:.2f}$\nVente +0.5 +1 +2 +3 + coffre +4 +5 +7 +10")
+    if bal: send_tg(f"🧠 V19.2 4-COINS 1.10$ LIVE!\nSolde:{bal:.4f}$ Garde:{CONFIG['principal']*0.30:.2f}$ Dispo:{bal-CONFIG['principal']*0.30:.2f}$\nCoins: DOGE TRX XRP BNB (1.10$ OK)\nVente MOLO 0.5 1 2 3 + Coffre 4.5 5.5 7.5 10")
     while True:
         try:
-            # ===== VENTES MOLO ACHAT < VENTE =====
             for sym in list(positions.keys()):
                 data=get_signal_intelligent(sym)
                 if not data: continue
                 p=positions[sym]; profit=(data["price"]-p["avg"])/p["avg"]*100
                 if profit > p.get("peak",0): p["peak"]=profit; save()
                 ordre=None
-                # MOLO - ACHAT<Vente +0.5 +1 +2 +3
                 if profit>=0.5 and p.get("s05",0)==0: ordre={"pct":25,"txt":f"💰 MOLO +0.5% {sym}","key":"s05","coffre":False}
                 elif profit>=1.0 and p.get("s1",0)==0: ordre={"pct":25,"txt":f"💰 MOLO +1% {sym}","key":"s1","coffre":False}
                 elif profit>=2.0 and p.get("s2",0)==0: ordre={"pct":25,"txt":f"💰 MOLO +2% {sym}","key":"s2","coffre":False}
                 elif profit>=3.0 and p.get("s3",0)==0: ordre={"pct":25,"txt":f"💰 MOLO +3% {sym}","key":"s3","coffre":False}
-                # COFFRE AUTONOME +4 +5 +7 +10
                 elif profit>=4.5 and p.get("c4",0)==0: ordre={"pct":20,"txt":f"🏦 COFFRE +4.5% BONUS {sym}","key":"c4","coffre":True}
                 elif profit>=5.5 and p.get("c5",0)==0: ordre={"pct":30,"txt":f"🏦 COFFRE +5.5% BONUS {sym}","key":"c5","coffre":True}
                 elif profit>=7.5 and p.get("c7",0)==0: ordre={"pct":30,"txt":f"💎 WALLET PERSO +7.5% {sym}","key":"c7","coffre":True}
                 elif profit>=10: ordre={"pct":100,"txt":f"🚀 JACKPOT +{profit:.1f}% {sym}","key":"c10","coffre":True}
-                # TRAILING
                 elif profit>0 and profit < p.get("peak",0)-0.6 and p.get("peak",0)>=2: ordre={"pct":100,"txt":f"💎 TRAILING {sym} +{profit:.2f}% peak {p['peak']:.2f}%","key":"trail","coffre":False}
-
                 if ordre:
                     try:
                         qty_sell=round(p["qty"]*ordre["pct"]/100,6)
@@ -110,7 +107,7 @@ def trading_loop():
                         gain=qty_sell*(data["price"]-p["avg"])
                         if ordre["coffre"]:
                             CONFIG["coffre_total"]+=gain; CONFIG["wallet_perso"]["bonus"]+=gain*0.5
-                            send_tg(f"{ordre['txt']}\nGain BONUS {gain:.4f}$ -> COFFRE {CONFIG['coffre_total']:.4f}$\nPrincipal gardé!")
+                            send_tg(f"{ordre['txt']}\nGain BONUS {gain:.4f}$ -> COFFRE {CONFIG['coffre_total']:.4f}$")
                         else:
                             send_tg(f"{ordre['txt']} @ {data['price']:.4f} Profit {profit:.2f}%")
                         CONFIG["stats"][sym]=CONFIG["stats"].get(sym,0)+1
@@ -119,7 +116,6 @@ def trading_loop():
                         save()
                     except Exception as e: send_tg(f"❌ Vente {sym} {e}")
 
-            # ===== ACHAT INTELLIGENT =====
             if len(positions)<3:
                 meilleurs=[]
                 for sym in AUTO_COINS:
@@ -134,10 +130,9 @@ def trading_loop():
                     meilleurs.sort(key=lambda x: x["score"], reverse=True)
                     choix=meilleurs[0]; sym=choix["symbol"]; price=choix["price"]; score=choix["score"]
                     bal=get_real_balance()
-                    min_req=MIN_NOTIONAL.get(sym,1.0)
+                    usdt_voulu=1.10
+                    if sym=="BNBUSDT": usdt_voulu=5.20
                     if score>=75: usdt_voulu=5.50
-                    elif min_req>=5: usdt_voulu=5.20
-                    else: usdt_voulu=1.10
                     ok, raison, usdt_final=peut_trader(bal, usdt_voulu, price, sym)
                     if ok:
                         qty=round(usdt_final/price,6)
@@ -159,7 +154,6 @@ def trading_loop():
                                 except Exception as e2: send_tg(f"❌ {sym} fallback {e2}")
                             else: send_tg(f"❌ Achat {sym} {e}")
 
-            # ===== HEBDO DIMANCHE 18H =====
             now=datetime.utcnow()
             if now.weekday()==6 and now.hour==18 and now.minute<2:
                 bal=get_real_balance()
@@ -180,10 +174,10 @@ def anti_sleep():
 @app.route("/")
 def home():
     bal=get_real_balance(); txt=f"{bal:.4f} USDT" if bal else "No bal"
-    return f"<h1>V19.2 MOLO 0.5 1 2 3 + COFFRE 4 5 7 10</h1><h2>{txt} Positions {list(positions.keys())} Coffre {CONFIG['coffre_total']:.2f}$</h2>"
+    return f"<h1>V19.2 4-COINS MOLO 0.5 1 2 3 + COFFRE 4.5 5.5 7.5 10</h1><h2>{txt} Pos {list(positions.keys())} Coffre {CONFIG['coffre_total']:.2f}$</h2>"
 @app.route("/ping")
 def ping():
-    return jsonify({"v":"19.2","bal":get_real_balance(),"pos":list(positions.keys()),"coffre":CONFIG["coffre_total"]})
+    return jsonify({"v":"19.2-4coins","bal":get_real_balance(),"pos":list(positions.keys()),"coffre":CONFIG["coffre_total"]})
 
 threading.Thread(target=trading_loop, daemon=True).start()
 threading.Thread(target=anti_sleep, daemon=True).start()
