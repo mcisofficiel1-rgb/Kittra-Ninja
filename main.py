@@ -47,8 +47,6 @@ def get_qty_coin(s):
             if c['coin']==cn: return float(c['walletBalance'])
         return 0.0
     except: return 0.0
-
-# === FONCTION DEBUT V10 ===
 def get_variation_5min(symbol):
     try:
         p=get_price(symbol)
@@ -60,13 +58,10 @@ def get_variation_5min(symbol):
         if len(price_history[symbol])<2: return 0
         return (p-price_history[symbol][0][1])/price_history[symbol][0][1]*100
     except: return 0
-
-# === INTELLIGENCE META AI ADAPTATIVE 50->70% ===
 def get_seuil_intelligence_adaptatif(capital):
-    if capital < 20: return 50 # Petit capital -> bosse plus, achète plus!
+    if capital < 20: return 50
     elif capital < 100: return 60
-    else: return 70 # Gros capital -> très prudent
-
+    else: return 70
 def get_signal_intelligent_60(symbol, seuil):
     try:
         var5=get_variation_5min(symbol)
@@ -85,7 +80,6 @@ def get_signal_intelligent_60(symbol, seuil):
         if var5 > 3.0: return "SELL_PUMP"
         return "NEUTRAL"
     except: return "NEUTRAL"
-
 def peut_trader(symbol, usdt):
     bal=get_real_balance()
     if not bal or bal < 1.1: return False
@@ -105,6 +99,7 @@ def get_auto_coins_by_capital(cap):
     elif cap < 250: return ["BNBUSDT","SOLUSDT","BTCUSDT","XRPUSDT","DOGEUSDT"]
     else: return ["BNBUSDT","SOLUSDT","BTCUSDT","XRPUSDT","DOGEUSDT","TRXUSDT","ETHUSDT"]
 
+# === MOLO +0.5 +1 +2 +3 +4 +5 +6 +10 FIX AVEC RETURN ===
 def check_and_sell_MOLO_NINJA(symbol, price):
     pos=positions.get(symbol)
     if not pos: return
@@ -112,38 +107,62 @@ def check_and_sell_MOLO_NINJA(symbol, price):
     if entry==0: return
     gain=(price-entry)/entry*100
     qty_real=get_qty_coin(symbol)
-    if qty_real < 0.000001: return
+    if qty_real < 0.0001:
+        if symbol in positions: del positions[symbol]; save()
+        return
+    if gain >= 10.0 and not pos.get('mega_60'):
+        vendu=qty_real
+        if sell_v19_3(symbol, vendu):
+            CONFIG["stats"]["win"]+=1; CONFIG["stats"]["profit_total"]+= (price-entry)*vendu; CONFIG["coffre_total"]+= price*vendu*0.5
+            send_tg(f"💥 JACKPOT +10% {symbol}! Coffre {CONFIG['coffre_total']:.2f}$"); del positions[symbol]; save(); return
+    if gain >= 6.0 and not pos.get('mega_60'):
+        vendu=qty_real*0.99
+        if sell_v19_3(symbol, vendu):
+            CONFIG["wallet_perso"]["bonus"]+= price*vendu*0.5; pos['mega_60']=True; pos['mega_50']=True; pos['mega_40']=True; pos['ninja_30']=True; pos['molo_20']=True; pos['molo_10']=True; pos['molo_05']=True
+            save(); send_tg(f"🔥 +6% {symbol}"); return
+    if gain >= 5.0 and not pos.get('mega_50'):
+        vendu=qty_real*0.5
+        if sell_v19_3(symbol, vendu):
+            CONFIG["coffre_total"]+= price*vendu*0.5; pos['mega_50']=True; pos['mega_40']=True; pos['ninja_30']=True; pos['molo_20']=True; pos['molo_10']=True; pos['molo_05']=True
+            save(); send_tg(f"💎 +5% {symbol} Coffre {CONFIG['coffre_total']:.2f}$"); return
+    if gain >= 4.0 and not pos.get('mega_40'):
+        vendu=qty_real*0.4
+        if sell_v19_3(symbol, vendu):
+            CONFIG["coffre_total"]+= price*vendu*0.5; pos['mega_40']=True; pos['ninja_30']=True; pos['molo_20']=True; pos['molo_10']=True; pos['molo_05']=True
+            save(); send_tg(f"🚀 +4% {symbol} Coffre {CONFIG['coffre_total']:.2f}$"); return
+    if gain >= 3.0 and not pos.get('ninja_30'):
+        vendu=qty_real*0.3
+        if sell_v19_3(symbol, vendu):
+            CONFIG["coffre_total"]+= price*vendu*0.5; pos['ninja_30']=True; pos['molo_20']=True; pos['molo_10']=True; pos['molo_05']=True
+            save(); send_tg(f"🥷 +3% {symbol}"); return
+    if gain >= 2.0 and not pos.get('molo_20'):
+        vendu=qty_real*0.3
+        if sell_v19_3(symbol, vendu):
+            CONFIG["wallet_perso"]["bonus"]+= price*vendu*0.5; pos['molo_20']=True; pos['molo_10']=True; pos['molo_05']=True
+            save(); send_tg(f"🔥 +2% {symbol}"); return
+    if gain >= 1.0 and not pos.get('molo_10'):
+        vendu=qty_real*0.3
+        if sell_v19_3(symbol, vendu):
+            CONFIG["coffre_total"]+= price*vendu*0.5; pos['molo_10']=True; pos['molo_05']=True
+            save(); send_tg(f"💰 +1% {symbol} COFFRE {CONFIG['coffre_total']:.2f}$"); return
     if gain >= 0.5 and not pos.get('molo_05'):
-        sell_v19_3(symbol, qty_real*0.30); pos['molo_05']=True; send_tg(f"🐢 +0.5% {symbol}")
-    elif gain >= 1.0 and not pos.get('molo_10'):
-        sell_v19_3(symbol, qty_real*0.20); CONFIG["coffre_total"]+= price*qty_real*0.20*0.5; pos['molo_10']=True; send_tg(f"💰 +1% {symbol} COFFRE {CONFIG['coffre_total']:.2f}$")
-    elif gain >= 2.0 and not pos.get('molo_20'):
-        sell_v19_3(symbol, qty_real*0.15); CONFIG["wallet_perso"]["bonus"]+= price*qty_real*0.15*0.5; pos['molo_20']=True; send_tg(f"🔥 +2% {symbol}")
-    elif gain >= 3.0 and not pos.get('ninja_30'):
-        sell_v19_3(symbol, qty_real*0.10); CONFIG["coffre_total"]+= price*qty_real*0.10*0.7; pos['ninja_30']=True; send_tg(f"🥷 +3% {symbol}")
-    elif gain >= 4.0 and not pos.get('mega_40'):
-        sell_v19_3(symbol, qty_real*0.10); CONFIG["coffre_total"]+= price*qty_real*0.10; pos['mega_40']=True; send_tg(f"🚀 +4% {symbol}")
-    elif gain >= 5.0 and not pos.get('mega_50'):
-        sell_v19_3(symbol, qty_real*0.05); CONFIG["coffre_total"]+= price*qty_real*0.05; pos['mega_50']=True; send_tg(f"💎 +5% {symbol}")
-    elif gain >= 6.0 and not pos.get('mega_60'):
-        sell_v19_3(symbol, qty_real*0.05); CONFIG["wallet_perso"]["bonus"]+= price*qty_real*0.05; pos['mega_60']=True; send_tg(f"🔥 +6% {symbol}")
-    elif gain >= 10.0:
-        sell_v19_3(symbol, qty_real); CONFIG["stats"]["win"]+=1; CONFIG["stats"]["profit_total"]+= (price-entry)*qty_real; CONFIG["coffre_total"]+= price*qty_real*0.5; send_tg(f"💥 JACKPOT +10% {symbol}!"); del positions[symbol]
-    save()
+        vendu=qty_real*0.3
+        if sell_v19_3(symbol, vendu):
+            pos['molo_05']=True; save(); send_tg(f"🐢 +0.5% {symbol} Gain {gain:.2f}%"); return
 
 def trading_loop():
     time.sleep(5); load(); bal=get_real_balance()
-    if bal: send_tg(f"🧠 KITTRA V20.4 FINAL! Intel adaptative 50%->70% LIVE! Solde:{bal:.2f}$")
+    if bal: send_tg(f"🧠 KITTRA V20.4.1 FIX LIVE! Intel {get_seuil_intelligence_adaptatif(bal+CONFIG['coffre_total'])}% Solde:{bal:.2f}$")
     while True:
         try:
             bal=get_real_balance()
             if not bal: time.sleep(45); continue
-            capital_total = bal + CONFIG["coffre_total"]
-            seuil = get_seuil_intelligence_adaptatif(capital_total)
+            capital_total=bal+CONFIG["coffre_total"]
+            seuil=get_seuil_intelligence_adaptatif(capital_total)
             AUTO_COINS=get_auto_coins_by_capital(capital_total)
             bnb_qty=get_qty_coin("BNBUSDT")
             if bnb_qty>0.001 and "BNBUSDT" not in positions:
-                positions["BNBUSDT"]={"entry_price":10.34,"qty":bnb_qty,"molo_05":False,"molo_10":False,"molo_20":False,"ninja_30":False,"mega_40":False,"mega_50":False,"mega_60":False}; save()
+                positions["BNBUSDT"]={"entry_price":10.34,"qty":bnb_qty,"molo_05":False,"molo_10":False,"molo_20":False,"ninja_30":False,"mega_40":False,"mega_50":False,"mega_60":False}; save(); send_tg(f"🔄 SYNC BNB {bnb_qty}")
             for sym in list(positions.keys()):
                 price=get_price(sym)
                 if price: check_and_sell_MOLO_NINJA(sym, price)
@@ -159,20 +178,19 @@ def trading_loop():
 def weekly_tasks():
     while True:
         now=datetime.now()
-        if now.weekday()==0 and now.hour==8: send_tg(f"📅 LUNDI AUDIT | Pos:{list(positions.keys())} | Coffre:{CONFIG['coffre_total']:.2f}$ | Seuil Intel:{get_seuil_intelligence_adaptatif(get_real_balance()+CONFIG['coffre_total'])}%")
+        if now.weekday()==0 and now.hour==8: send_tg(f"📅 LUNDI AUDIT | Pos:{list(positions.keys())} | Coffre:{CONFIG['coffre_total']:.2f}$")
         if now.weekday()==4 and now.hour==20 and CONFIG["coffre_total"]>=5: send_tg(f"🏦 COFFRE {CONFIG['coffre_total']:.2f}$ prêt -> {WALLET_EXTERNE}")
-        if now.weekday()==6 and now.hour==20: send_tg(f"📊 RAPPORT HEBDO | Profit:{CONFIG['stats']['profit_total']:.2f}$ Coffre:{CONFIG['coffre_total']:.2f}$ Bonus:{CONFIG['wallet_perso']['bonus']:.2f}$")
+        if now.weekday()==6 and now.hour==20: send_tg(f"📊 RAPPORT HEBDO | Win:{CONFIG['stats']['win']} Profit:{CONFIG['stats']['profit_total']:.2f}$ Coffre:{CONFIG['coffre_total']:.2f}$")
         time.sleep(3600)
 def anti_sleep():
     while True:
         time.sleep(600)
         try: requests.get(f"{RENDER_URL}/ping", timeout=10)
         except: pass
-
 @app.route("/")
-def home(): bal=get_real_balance(); return f"<h1>V20.4 FINAL ADAPTATIF 50-70%</h1><h2>Solde:{bal} | Pos:{list(positions.keys())} | Coffre:{CONFIG['coffre_total']}$</h2>"
+def home(): bal=get_real_balance(); return f"<h1>V20.4.1 FIX MOLO OK</h1><h2>Solde:{bal} | Pos:{list(positions.keys())} | Coffre:{CONFIG['coffre_total']}$</h2>"
 @app.route("/ping")
-def ping(): return jsonify({"v":"20.4","bal":get_real_balance(),"pos":list(positions.keys()),"coffre":CONFIG["coffre_total"]})
+def ping(): return jsonify({"v":"20.4.1","bal":get_real_balance(),"pos":list(positions.keys()),"coffre":CONFIG["coffre_total"]})
 threading.Thread(target=trading_loop, daemon=True).start()
 threading.Thread(target=weekly_tasks, daemon=True).start()
 threading.Thread(target=anti_sleep, daemon=True).start()
