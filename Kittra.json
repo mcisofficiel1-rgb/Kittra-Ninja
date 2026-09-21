@@ -1,23 +1,110 @@
 {
-  "BOT_NAME": "KITTRA-NINJA-ULTIME",
-  "MODE": "MAINNET",
+  "BOT_NAME": "KITTRA-NINJA-V20.4-META-AI",
+  "MODE": "MOLO_NINJA_MEGA_ADAPTATIF",
+  "VERSION": "20.4",
   "EXCHANGE": "BYBIT",
   "API_URL": "https://api.bybit.com",
   "MARKET": "SPOT_REAL",
   "testnet": false,
+
+  "INTELLIGENCE": {
+    "type": "META_AI_ADAPTATIVE",
+    "base": "50-70%",
+    "seuils": {
+      "0-20$": "50% -> bosse plus, 5-7 trades/jour",
+      "20-100$": "60% -> equilibre",
+      "100$+": "70% -> securise max"
+    },
+    "indicateurs": {
+      "DIP_5min": "40%",
+      "Prix_vs_Moyenne_10min": "30%",
+      "Rebond_Detection": "30%"
+    },
+    "actuel": "50% car solde 10.49$"
+  },
+
   "trading": {
     "enabled": true,
-    "pair": "BTC/USDT",
-    "amount_usdt": 10,
-    "strategy": "SCALP_NINJA"
+    "autonomie": "ACHAT_VENTE_MULTI_CRYPTO_AUTO",
+    "capital_total": "Solde + Coffre",
+    "auto_coins_by_capital": {
+      "0-20$": ["BNBUSDT"],
+      "20-50$": ["BNBUSDT", "SOLUSDT"],
+      "50-100$": ["BNBUSDT", "SOLUSDT", "BTCUSDT"],
+      "100-250$": ["BNBUSDT", "SOLUSDT", "BTCUSDT", "XRPUSDT", "DOGEUSDT"],
+      "250$+": ["BNBUSDT", "SOLUSDT", "BTCUSDT", "XRPUSDT", "DOGEUSDT", "TRXUSDT", "ETHUSDT"]
+    },
+    "amount_usdt": 5,
+    "strategy": "MOLO_TORTUE + NINJA + MEGA_PUMP",
+    "niveaux_vente": {
+      "+0.5%": "30% vendu -> securise mise",
+      "+1%": "20% vendu -> 50% COFFRE FORT",
+      "+2%": "15% vendu -> 50% BONUS PERSO",
+      "+3%": "10% vendu -> 70% COFFRE",
+      "+4%": "10% vendu -> 100% COFFRE",
+      "+5%": "5% vendu -> 100% COFFRE",
+      "+6%": "5% vendu -> 100% BONUS",
+      "+10%": "Reste vendu -> JACKPOT 50% COFFRE"
+    }
   },
+
   "vault": {
-    "VAULT_NAME": "KITTRA-VAULT",
+    "VAULT_NAME": "KITTRA-VAULT-V20.4",
     "VAULT_ADDRESS": "TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG",
     "auto_save_percent": 50,
-    "enabled": true
+    "coffre_total": 0.0,
+    "wallet_perso": {
+      "bonus": 0.0
+    },
+    "enabled": true,
+    "transfert_auto_si": "> 10$"
   },
+
+  "positions": {
+    "BNBUSDT": {
+      "entry_price": 10.34,
+      "qty": 0.0135864,
+      "current_price": 10.49,
+      "gain_actuel": "+1.45%",
+      "molo_05": false,
+      "molo_10": false,
+      "molo_20": false,
+      "ninja_30": false,
+      "mega_40": false,
+      "mega_50": false,
+      "mega_60": false,
+      "status": "SYNC OK - Attente vente +0.5%"
+    }
+  },
+
+  "stats": {
+    "trades": 1,
+    "win": 0,
+    "profit_total": 0.0,
+    "coffre_total": 0.0,
+    "bonus_perso": 0.0
+  },
+
+  "taches_hebdo": {
+    "lundi_8h": "AUDIT + SYNC BNB manuel",
+    "mercredi": "REBALANCING auto coins selon capital",
+    "vendredi_20h": "COFFRE >10$? Alerte transfert wallet",
+    "dimanche_20h": "RAPPORT HEBDO profit/coffre/bonus",
+    "toutes_les_10min": "Anti-sleep Render ping"
+  },
+
   "telegram": {
     "enabled": true
+  },
+
+  "fonctions_depuis_debut": [
+    "load() save() Kittra.json",
+    "send_tg() get_real_balance() get_price() get_qty_coin()",
+    "get_variation_5min() - detecteur DIP",
+    "get_signal_intelligent_60() + get_seuil_adaptatif() - Meta AI",
+    "peut_trader() anti-170131",
+    "buy_v19_3() sell_v19_3()",
+    "check_and_sell_MOLO_NINJA() +4+5+6+10",
+    "trading_loop() weekly_tasks() anti_sleep()"
+  ]
   }
-}
