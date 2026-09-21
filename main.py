@@ -2,37 +2,31 @@ import os, threading, time, requests, json
 from datetime import datetime
 from flask import Flask, jsonify
 from pybit.unified_trading import HTTP
-
 app = Flask(__name__)
 
-# === ENV ===
-def get_env(*names):
-    for n in names:
-        v=os.getenv(n)
+def get_env(*n):
+    for x in n:
+        v=os.getenv(x)
         if v: return v
     return None
 
-API_KEY=get_env("API_KEY","BYBIT_API_KEY")
-API_SECRET=get_env("API_SECRET","BYBIT_API_SECRET")
-BOT_TOKEN=get_env("TELEGRAM_BOT_TOKEN","TG_TOKEN")
-CHAT_ID=get_env("TELEGRAM_CHAT_ID","TG_ID")
+API_KEY=get_env("API_KEY","BYBIT_API_KEY"); API_SECRET=get_env("API_SECRET","BYBIT_API_SECRET")
+BOT_TOKEN=get_env("TELEGRAM_BOT_TOKEN","TG_TOKEN"); CHAT_ID=get_env("TELEGRAM_CHAT_ID","TG_ID")
 RENDER_URL=os.getenv("RENDER_EXTERNAL_URL","https://kittra-ninja-ultime.onrender.com")
 WALLET_EXTERNE="TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG"
-
 session=HTTP(testnet=False, api_key=API_KEY, api_secret=API_SECRET) if API_KEY else None
 
-CONFIG={"principal":10.3443,"principal_securite":0.30,"coffre_total":0,"wallet_perso":{"bonus":0},"stats":{}}
-AUTO_COINS=["DOGEUSDT","TRXUSDT","XRPUSDT","BNBUSDT"]
-price_history={}; positions={}; KITTRA_FILE="Kittra.json"
+CONFIG={"principal":10.3443,"principal_securite":0.30,"coffre_total":0.0,"wallet_perso":{"bonus":0.0},"stats":{"trades":0,"win":0,"profit_total":0.0}}
+positions={}; price_history={}; KITTRA_FILE="Kittra.json"
 
 def load():
     global positions, CONFIG
     try:
         with open(KITTRA_FILE,"r") as f:
-            d=json.load(f); positions=d.get("positions",{}); CONFIG["stats"]=d.get("stats",{}); CONFIG["coffre_total"]=d.get("coffre",0)
+            d=json.load(f); positions=d.get("positions",{}); CONFIG["stats"]=d.get("stats",CONFIG["stats"]); CONFIG["coffre_total"]=d.get("coffre",0); CONFIG["wallet_perso"]=d.get("wallet_perso",{"bonus":0})
     except: pass
 def save():
-    with open(KITTRA_FILE,"w") as f: json.dump({"positions":positions,"stats":CONFIG["stats"],"coffre":CONFIG["coffre_total"]}, f)
+    with open(KITTRA_FILE,"w") as f: json.dump({"positions":positions,"stats":CONFIG["stats"],"coffre":CONFIG["coffre_total"],"wallet_perso":CONFIG["wallet_perso"]}, f)
 def send_tg(m):
     try: requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id":CHAT_ID,"text":m}, timeout=10)
     except: pass
@@ -42,30 +36,133 @@ def get_real_balance():
         for c in coins:
             if c['coin']=='USDT': return float(c['walletBalance'])
     except: return None
+def get_price(s):
+    try: return float(session.get_tickers(category="spot", symbol=s)['result']['list'][0]['lastPrice'])
+    except: return None
+def get_qty_coin(s):
+    try:
+        coins=session.get_wallet_balance(accountType="UNIFIED")['result']['list'][0]['coin']
+        cn=s.replace("USDT","")
+        for c in coins:
+            if c['coin']==cn: return float(c['walletBalance'])
+        return 0.0
+    except: return 0.0
 
-#... garde tes fonctions get_signal_intelligent, get_variation_5min, peut_trader...
+# === FONCTION DEBUT V10 ===
+def get_variation_5min(symbol):
+    try:
+        p=get_price(symbol)
+        if not p: return 0
+        now=time.time()
+        if symbol not in price_history: price_history[symbol]=[]
+        price_history[symbol].append((now,p))
+        price_history[symbol]=[(t,pr) for t,pr in price_history[symbol] if now-t<=600]
+        if len(price_history[symbol])<2: return 0
+        return (p-price_history[symbol][0][1])/price_history[symbol][0][1]*100
+    except: return 0
 
-# === ACHAT CORRIGÉ ANTI-170131 V19.3 ===
-def buy_v19_3(symbol, usdt_amount):
-    # CORRECTION ICI: on envoie des USDT, pas des qty de coin
-    return session.place_order(
-        category="spot", symbol=symbol, side="Buy",
-        orderType="Market", qty=str(usdt_amount),
-        marketUnit="quoteCoin"
-    )
+# === INTELLIGENCE META AI ADAPTATIVE 50->70% ===
+def get_seuil_intelligence_adaptatif(capital):
+    if capital < 20: return 50 # Petit capital -> bosse plus, achète plus!
+    elif capital < 100: return 60
+    else: return 70 # Gros capital -> très prudent
+
+def get_signal_intelligent_60(symbol, seuil):
+    try:
+        var5=get_variation_5min(symbol)
+        score=0
+        if var5 < -2.0: score+=40
+        elif var5 < -1.5: score+=30
+        elif var5 < -0.8: score+=15
+        if symbol in price_history and len(price_history[symbol])>=3:
+            prices=[pr for _,pr in price_history[symbol]]
+            avg=sum(prices)/len(prices)
+            if prices[-1] < avg*0.995: score+=30
+        if symbol in price_history and len(price_history[symbol])>=4:
+            prices=[pr for _,pr in price_history[symbol]]
+            if prices[-1] > prices[-2] and prices[-2] < prices[-3]: score+=30
+        if score >= seuil: return f"BUY_DIP_{seuil}"
+        if var5 > 3.0: return "SELL_PUMP"
+        return "NEUTRAL"
+    except: return "NEUTRAL"
+
+def peut_trader(symbol, usdt):
+    bal=get_real_balance()
+    if not bal or bal < 1.1: return False
+    if usdt < 1.1: return False
+    if symbol in positions: return False
+    return True
+def buy_v19_3(s, usdt):
+    try: return session.place_order(category="spot", symbol=s, side="Buy", orderType="Market", qty=str(round(usdt,2)), marketUnit="quoteCoin")
+    except Exception as e: print(f"BUY {e}"); return None
+def sell_v19_3(s, qty):
+    try: return session.place_order(category="spot", symbol=s, side="Sell", orderType="Market", qty=str(qty))
+    except Exception as e: print(f"SELL {e}"); return None
+def get_auto_coins_by_capital(cap):
+    if cap < 20: return ["BNBUSDT"]
+    elif cap < 50: return ["BNBUSDT","SOLUSDT"]
+    elif cap < 100: return ["BNBUSDT","SOLUSDT","BTCUSDT"]
+    elif cap < 250: return ["BNBUSDT","SOLUSDT","BTCUSDT","XRPUSDT","DOGEUSDT"]
+    else: return ["BNBUSDT","SOLUSDT","BTCUSDT","XRPUSDT","DOGEUSDT","TRXUSDT","ETHUSDT"]
+
+def check_and_sell_MOLO_NINJA(symbol, price):
+    pos=positions.get(symbol)
+    if not pos: return
+    entry=float(pos.get('entry_price',0))
+    if entry==0: return
+    gain=(price-entry)/entry*100
+    qty_real=get_qty_coin(symbol)
+    if qty_real < 0.000001: return
+    if gain >= 0.5 and not pos.get('molo_05'):
+        sell_v19_3(symbol, qty_real*0.30); pos['molo_05']=True; send_tg(f"🐢 +0.5% {symbol}")
+    elif gain >= 1.0 and not pos.get('molo_10'):
+        sell_v19_3(symbol, qty_real*0.20); CONFIG["coffre_total"]+= price*qty_real*0.20*0.5; pos['molo_10']=True; send_tg(f"💰 +1% {symbol} COFFRE {CONFIG['coffre_total']:.2f}$")
+    elif gain >= 2.0 and not pos.get('molo_20'):
+        sell_v19_3(symbol, qty_real*0.15); CONFIG["wallet_perso"]["bonus"]+= price*qty_real*0.15*0.5; pos['molo_20']=True; send_tg(f"🔥 +2% {symbol}")
+    elif gain >= 3.0 and not pos.get('ninja_30'):
+        sell_v19_3(symbol, qty_real*0.10); CONFIG["coffre_total"]+= price*qty_real*0.10*0.7; pos['ninja_30']=True; send_tg(f"🥷 +3% {symbol}")
+    elif gain >= 4.0 and not pos.get('mega_40'):
+        sell_v19_3(symbol, qty_real*0.10); CONFIG["coffre_total"]+= price*qty_real*0.10; pos['mega_40']=True; send_tg(f"🚀 +4% {symbol}")
+    elif gain >= 5.0 and not pos.get('mega_50'):
+        sell_v19_3(symbol, qty_real*0.05); CONFIG["coffre_total"]+= price*qty_real*0.05; pos['mega_50']=True; send_tg(f"💎 +5% {symbol}")
+    elif gain >= 6.0 and not pos.get('mega_60'):
+        sell_v19_3(symbol, qty_real*0.05); CONFIG["wallet_perso"]["bonus"]+= price*qty_real*0.05; pos['mega_60']=True; send_tg(f"🔥 +6% {symbol}")
+    elif gain >= 10.0:
+        sell_v19_3(symbol, qty_real); CONFIG["stats"]["win"]+=1; CONFIG["stats"]["profit_total"]+= (price-entry)*qty_real; CONFIG["coffre_total"]+= price*qty_real*0.5; send_tg(f"💥 JACKPOT +10% {symbol}!"); del positions[symbol]
+    save()
 
 def trading_loop():
-    time.sleep(5); load()
-    bal=get_real_balance()
-    if bal: send_tg(f"🧠 V19.3 4-COINS 1.10$ LIVE! Solde:{bal:.4f}$")
+    time.sleep(5); load(); bal=get_real_balance()
+    if bal: send_tg(f"🧠 KITTRA V20.4 FINAL! Intel adaptative 50%->70% LIVE! Solde:{bal:.2f}$")
     while True:
         try:
-            # TA LOGIQUE VENTE MOLO 0.5 1 2 3 + COFFRE etc...
-            # Pour ACHAT utilise buy_v19_3(sym, usdt_final) au lieu de qty
+            bal=get_real_balance()
+            if not bal: time.sleep(45); continue
+            capital_total = bal + CONFIG["coffre_total"]
+            seuil = get_seuil_intelligence_adaptatif(capital_total)
+            AUTO_COINS=get_auto_coins_by_capital(capital_total)
+            bnb_qty=get_qty_coin("BNBUSDT")
+            if bnb_qty>0.001 and "BNBUSDT" not in positions:
+                positions["BNBUSDT"]={"entry_price":10.34,"qty":bnb_qty,"molo_05":False,"molo_10":False,"molo_20":False,"ninja_30":False,"mega_40":False,"mega_50":False,"mega_60":False}; save()
+            for sym in list(positions.keys()):
+                price=get_price(sym)
+                if price: check_and_sell_MOLO_NINJA(sym, price)
+            for sym in AUTO_COINS:
+                if sym in positions: continue
+                sig=get_signal_intelligent_60(sym, seuil)
+                if "BUY_DIP" in sig and peut_trader(sym, 5):
+                    res=buy_v19_3(sym, 5)
+                    if res: p=get_price(sym); positions[sym]={"entry_price":p,"qty":5/p,"molo_05":False,"molo_10":False,"molo_20":False,"ninja_30":False,"mega_40":False,"mega_50":False,"mega_60":False}; save(); send_tg(f"🛒 ACHAT Intel {seuil}% {sym} à {p}$")
             time.sleep(45)
-        except Exception as e:
-            print(f"LOOP {e}"); time.sleep(60)
+        except Exception as e: print(f"LOOP {e}"); time.sleep(60)
 
+def weekly_tasks():
+    while True:
+        now=datetime.now()
+        if now.weekday()==0 and now.hour==8: send_tg(f"📅 LUNDI AUDIT | Pos:{list(positions.keys())} | Coffre:{CONFIG['coffre_total']:.2f}$ | Seuil Intel:{get_seuil_intelligence_adaptatif(get_real_balance()+CONFIG['coffre_total'])}%")
+        if now.weekday()==4 and now.hour==20 and CONFIG["coffre_total"]>=5: send_tg(f"🏦 COFFRE {CONFIG['coffre_total']:.2f}$ prêt -> {WALLET_EXTERNE}")
+        if now.weekday()==6 and now.hour==20: send_tg(f"📊 RAPPORT HEBDO | Profit:{CONFIG['stats']['profit_total']:.2f}$ Coffre:{CONFIG['coffre_total']:.2f}$ Bonus:{CONFIG['wallet_perso']['bonus']:.2f}$")
+        time.sleep(3600)
 def anti_sleep():
     while True:
         time.sleep(600)
@@ -73,13 +170,10 @@ def anti_sleep():
         except: pass
 
 @app.route("/")
-def home():
-    bal=get_real_balance(); return f"<h1>V19.3 MOLO+COFFRE LIVE</h1><h2>{bal} USDT Pos {list(positions.keys())}</h2>"
+def home(): bal=get_real_balance(); return f"<h1>V20.4 FINAL ADAPTATIF 50-70%</h1><h2>Solde:{bal} | Pos:{list(positions.keys())} | Coffre:{CONFIG['coffre_total']}$</h2>"
 @app.route("/ping")
-def ping(): return jsonify({"v":"19.3","bal":get_real_balance(),"pos":list(positions.keys())})
-
+def ping(): return jsonify({"v":"20.4","bal":get_real_balance(),"pos":list(positions.keys()),"coffre":CONFIG["coffre_total"]})
 threading.Thread(target=trading_loop, daemon=True).start()
+threading.Thread(target=weekly_tasks, daemon=True).start()
 threading.Thread(target=anti_sleep, daemon=True).start()
-
-if __name__=="__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT",10000)))
+if __name__=="__main__": app.run(host="0.0.0.0", port=int(os.getenv("PORT",10000)))
