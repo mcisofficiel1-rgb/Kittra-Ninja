@@ -3,22 +3,18 @@ from datetime import datetime
 from flask import Flask, jsonify
 from pybit.unified_trading import HTTP
 app = Flask(__name__)
-
 def get_env(*n):
     for x in n:
         v=os.getenv(x)
         if v: return v
     return None
-
 API_KEY=get_env("API_KEY","BYBIT_API_KEY"); API_SECRET=get_env("API_SECRET","BYBIT_API_SECRET")
 BOT_TOKEN=get_env("TELEGRAM_BOT_TOKEN","TG_TOKEN"); CHAT_ID=get_env("TELEGRAM_CHAT_ID","TG_ID")
 RENDER_URL=os.getenv("RENDER_EXTERNAL_URL","https://kittra-ninja-ultime.onrender.com")
 WALLET_EXTERNE="TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG"
 session=HTTP(testnet=False, api_key=API_KEY, api_secret=API_SECRET) if API_KEY else None
-
-CONFIG={"principal":10.3443,"principal_securite":0.30,"coffre_total":0.0,"wallet_perso":{"bonus":0.0},"stats":{"trades":0,"win":0,"profit_total":0.0}}
+CONFIG={"principal":10.3443,"principal_securite":0.30,"coffre_total":0.0,"wallet_perso":{"bonus":0.0},"stats":{"trades":0,"win":0,"profit_total":0.0},"capital_base":10.0,"seuil_securite":11.0}
 positions={}; price_history={}; KITTRA_FILE="Kittra.json"
-
 def load():
     global positions, CONFIG
     try:
@@ -26,7 +22,8 @@ def load():
             d=json.load(f); positions=d.get("positions",{}); CONFIG["stats"]=d.get("stats",CONFIG["stats"]); CONFIG["coffre_total"]=d.get("coffre",0); CONFIG["wallet_perso"]=d.get("wallet_perso",{"bonus":0})
     except: pass
 def save():
-    with open(KITTRA_FILE,"w") as f: json.dump({"positions":positions,"stats":CONFIG["stats"],"coffre":CONFIG["coffre_total"],"wallet_perso":CONFIG["wallet_perso"]}, f)
+    with open(KITTRA_FILE,"w") as f:
+        json.dump({"positions":positions,"stats":CONFIG["stats"],"coffre":CONFIG["coffre_total"],"wallet_perso":CONFIG["wallet_perso"]}, f)
 def send_tg(m):
     try: requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id":CHAT_ID,"text":m}, timeout=10)
     except: pass
@@ -36,6 +33,37 @@ def get_real_balance():
         for c in coins:
             if c['coin']=='USDT': return float(c['walletBalance'])
     except: return None
+
+# === NOUVEAU NIVEAU COFFRE AUTO ===
+def transfer_to_fund(amount):
+    try:
+        session.create_internal_transfer(coin="USDT", amount=str(round(amount,4)), fromAccountType="UNIFIED", toAccountType="FUND")
+        return True
+    except Exception as e:
+        print(f"TRANSFER FAIL {e}")
+        try:
+            # fallback V5 asset transfer
+            session.asset_transfer(coin="USDT", amount=str(round(amount,4)), fromAccountType="UNIFIED", toAccountType="FUND")
+            return True
+        except Exception as e2:
+            print(f"TRANSFER FAIL2 {e2}")
+            return False
+
+def check_and_secure_base():
+    bal=get_real_balance()
+    if not bal: return False
+    base=CONFIG.get("capital_base",10.0)
+    seuil=CONFIG.get("seuil_securite",11.0)
+    if bal >= seuil:
+        a_securiser=bal-base
+        if a_securiser >= 0.5:
+            if transfer_to_fund(a_securiser):
+                CONFIG["coffre_total"]+=a_securiser
+                save()
+                send_tg(f"🔒 COFFRE AUTO SÉCURISÉ! +{a_securiser:.2f}$ -> FUND\n💰 Retour base {base}$\n🏦 Coffre total: {CONFIG['coffre_total']:.2f}$")
+                return True
+    return False
+
 def get_price(s):
     try: return float(session.get_tickers(category="spot", symbol=s)['result']['list'][0]['lastPrice'])
     except: return None
@@ -98,8 +126,6 @@ def get_auto_coins_by_capital(cap):
     elif cap < 100: return ["BNBUSDT","SOLUSDT","BTCUSDT"]
     elif cap < 250: return ["BNBUSDT","SOLUSDT","BTCUSDT","XRPUSDT","DOGEUSDT"]
     else: return ["BNBUSDT","SOLUSDT","BTCUSDT","XRPUSDT","DOGEUSDT","TRXUSDT","ETHUSDT"]
-
-# === MOLO +0.5 +1 +2 +3 +4 +5 +6 +10 FIX AVEC RETURN ===
 def check_and_sell_MOLO_NINJA(symbol, price):
     pos=positions.get(symbol)
     if not pos: return
@@ -112,57 +138,41 @@ def check_and_sell_MOLO_NINJA(symbol, price):
         return
     if gain >= 10.0 and not pos.get('mega_60'):
         vendu=qty_real
-        if sell_v19_3(symbol, vendu):
-            CONFIG["stats"]["win"]+=1; CONFIG["stats"]["profit_total"]+= (price-entry)*vendu; CONFIG["coffre_total"]+= price*vendu*0.5
-            send_tg(f"💥 JACKPOT +10% {symbol}! Coffre {CONFIG['coffre_total']:.2f}$"); del positions[symbol]; save(); return
+        if sell_v19_3(symbol, vendu): CONFIG["stats"]["win"]+=1; CONFIG["stats"]["profit_total"]+= (price-entry)*vendu; CONFIG["coffre_total"]+= price*vendu*0.5; send_tg(f"💥 JACKPOT +10% {symbol}! Coffre {CONFIG['coffre_total']:.2f}$"); del positions[symbol]; save(); return
     if gain >= 6.0 and not pos.get('mega_60'):
         vendu=qty_real*0.99
-        if sell_v19_3(symbol, vendu):
-            CONFIG["wallet_perso"]["bonus"]+= price*vendu*0.5; pos['mega_60']=True; pos['mega_50']=True; pos['mega_40']=True; pos['ninja_30']=True; pos['molo_20']=True; pos['molo_10']=True; pos['molo_05']=True
-            save(); send_tg(f"🔥 +6% {symbol}"); return
+        if sell_v19_3(symbol, vendu): CONFIG["wallet_perso"]["bonus"]+= price*vendu*0.5; pos['mega_60']=True; pos['mega_50']=True; pos['mega_40']=True; pos['ninja_30']=True; pos['molo_20']=True; pos['molo_10']=True; pos['molo_05']=True; save(); send_tg(f"🔥 +6% {symbol}"); return
     if gain >= 5.0 and not pos.get('mega_50'):
         vendu=qty_real*0.5
-        if sell_v19_3(symbol, vendu):
-            CONFIG["coffre_total"]+= price*vendu*0.5; pos['mega_50']=True; pos['mega_40']=True; pos['ninja_30']=True; pos['molo_20']=True; pos['molo_10']=True; pos['molo_05']=True
-            save(); send_tg(f"💎 +5% {symbol} Coffre {CONFIG['coffre_total']:.2f}$"); return
+        if sell_v19_3(symbol, vendu): CONFIG["coffre_total"]+= price*vendu*0.5; pos['mega_50']=True; pos['mega_40']=True; pos['ninja_30']=True; pos['molo_20']=True; pos['molo_10']=True; pos['molo_05']=True; save(); send_tg(f"💎 +5% {symbol} Coffre {CONFIG['coffre_total']:.2f}$"); return
     if gain >= 4.0 and not pos.get('mega_40'):
         vendu=qty_real*0.4
-        if sell_v19_3(symbol, vendu):
-            CONFIG["coffre_total"]+= price*vendu*0.5; pos['mega_40']=True; pos['ninja_30']=True; pos['molo_20']=True; pos['molo_10']=True; pos['molo_05']=True
-            save(); send_tg(f"🚀 +4% {symbol} Coffre {CONFIG['coffre_total']:.2f}$"); return
+        if sell_v19_3(symbol, vendu): CONFIG["coffre_total"]+= price*vendu*0.5; pos['mega_40']=True; pos['ninja_30']=True; pos['molo_20']=True; pos['molo_10']=True; pos['molo_05']=True; save(); send_tg(f"🚀 +4% {symbol} Coffre {CONFIG['coffre_total']:.2f}$"); return
     if gain >= 3.0 and not pos.get('ninja_30'):
         vendu=qty_real*0.3
-        if sell_v19_3(symbol, vendu):
-            CONFIG["coffre_total"]+= price*vendu*0.5; pos['ninja_30']=True; pos['molo_20']=True; pos['molo_10']=True; pos['molo_05']=True
-            save(); send_tg(f"🥷 +3% {symbol}"); return
+        if sell_v19_3(symbol, vendu): CONFIG["coffre_total"]+= price*vendu*0.5; pos['ninja_30']=True; pos['molo_20']=True; pos['molo_10']=True; pos['molo_05']=True; save(); send_tg(f"🥷 +3% {symbol}"); return
     if gain >= 2.0 and not pos.get('molo_20'):
         vendu=qty_real*0.3
-        if sell_v19_3(symbol, vendu):
-            CONFIG["wallet_perso"]["bonus"]+= price*vendu*0.5; pos['molo_20']=True; pos['molo_10']=True; pos['molo_05']=True
-            save(); send_tg(f"🔥 +2% {symbol}"); return
+        if sell_v19_3(symbol, vendu): CONFIG["wallet_perso"]["bonus"]+= price*vendu*0.5; pos['molo_20']=True; pos['molo_10']=True; pos['molo_05']=True; save(); send_tg(f"🔥 +2% {symbol}"); return
     if gain >= 1.0 and not pos.get('molo_10'):
         vendu=qty_real*0.3
-        if sell_v19_3(symbol, vendu):
-            CONFIG["coffre_total"]+= price*vendu*0.5; pos['molo_10']=True; pos['molo_05']=True
-            save(); send_tg(f"💰 +1% {symbol} COFFRE {CONFIG['coffre_total']:.2f}$"); return
+        if sell_v19_3(symbol, vendu): CONFIG["coffre_total"]+= price*vendu*0.5; pos['molo_10']=True; pos['molo_05']=True; save(); send_tg(f"💰 +1% {symbol} COFFRE {CONFIG['coffre_total']:.2f}$"); return
     if gain >= 0.5 and not pos.get('molo_05'):
         vendu=qty_real*0.3
-        if sell_v19_3(symbol, vendu):
-            pos['molo_05']=True; save(); send_tg(f"🐢 +0.5% {symbol} Gain {gain:.2f}%"); return
-
+        if sell_v19_3(symbol, vendu): pos['molo_05']=True; save(); send_tg(f"🐢 +0.5% {symbol} Gain {gain:.2f}%"); return
 def trading_loop():
     time.sleep(5); load(); bal=get_real_balance()
-    if bal: send_tg(f"🧠 KITTRA V20.4.1 FIX LIVE! Intel {get_seuil_intelligence_adaptatif(bal+CONFIG['coffre_total'])}% Solde:{bal:.2f}$")
+    if bal: send_tg(f"🧠 KITTRA V20.5 COFFRE AUTO LIVE! Base 10$ Seuil 11$ | Intel {get_seuil_intelligence_adaptatif(bal+CONFIG['coffre_total'])}% Solde:{bal:.2f}$")
     while True:
         try:
             bal=get_real_balance()
             if not bal: time.sleep(45); continue
+            check_and_secure_base()
             capital_total=bal+CONFIG["coffre_total"]
             seuil=get_seuil_intelligence_adaptatif(capital_total)
             AUTO_COINS=get_auto_coins_by_capital(capital_total)
             bnb_qty=get_qty_coin("BNBUSDT")
-            if bnb_qty>0.001 and "BNBUSDT" not in positions:
-                positions["BNBUSDT"]={"entry_price":10.34,"qty":bnb_qty,"molo_05":False,"molo_10":False,"molo_20":False,"ninja_30":False,"mega_40":False,"mega_50":False,"mega_60":False}; save(); send_tg(f"🔄 SYNC BNB {bnb_qty}")
+            if bnb_qty>0.001 and "BNBUSDT" not in positions: positions["BNBUSDT"]={"entry_price":10.34,"qty":bnb_qty,"molo_05":False,"molo_10":False,"molo_20":False,"ninja_30":False,"mega_40":False,"mega_50":False,"mega_60":False}; save(); send_tg(f"🔄 SYNC BNB {bnb_qty}")
             for sym in list(positions.keys()):
                 price=get_price(sym)
                 if price: check_and_sell_MOLO_NINJA(sym, price)
@@ -174,7 +184,6 @@ def trading_loop():
                     if res: p=get_price(sym); positions[sym]={"entry_price":p,"qty":5/p,"molo_05":False,"molo_10":False,"molo_20":False,"ninja_30":False,"mega_40":False,"mega_50":False,"mega_60":False}; save(); send_tg(f"🛒 ACHAT Intel {seuil}% {sym} à {p}$")
             time.sleep(45)
         except Exception as e: print(f"LOOP {e}"); time.sleep(60)
-
 def weekly_tasks():
     while True:
         now=datetime.now()
@@ -188,9 +197,10 @@ def anti_sleep():
         try: requests.get(f"{RENDER_URL}/ping", timeout=10)
         except: pass
 @app.route("/")
-def home(): bal=get_real_balance(); return f"<h1>V20.4.1 FIX MOLO OK</h1><h2>Solde:{bal} | Pos:{list(positions.keys())} | Coffre:{CONFIG['coffre_total']}$</h2>"
+def home():
+    bal=get_real_balance(); return f"<h1>V20.5 COFFRE AUTO OK</h1><h2>Solde:{bal} | Pos:{list(positions.keys())} | Coffre:{CONFIG['coffre_total']}$ | Base 10$</h2>"
 @app.route("/ping")
-def ping(): return jsonify({"v":"20.4.1","bal":get_real_balance(),"pos":list(positions.keys()),"coffre":CONFIG["coffre_total"]})
+def ping(): return jsonify({"v":"20.5","bal":get_real_balance(),"pos":list(positions.keys()),"coffre":CONFIG["coffre_total"]})
 threading.Thread(target=trading_loop, daemon=True).start()
 threading.Thread(target=weekly_tasks, daemon=True).start()
 threading.Thread(target=anti_sleep, daemon=True).start()
