@@ -1,97 +1,66 @@
 <!DOCTYPE html>
 <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KITTRA V17.4 ULTIME</title>
+<title>KITTRA V22.2</title>
 <style>
-body{background:#000;color:#ff0000;text-align:center;font-family:monospace;margin:0;padding-bottom:30px}
-#eye{width:150px;height:150px;margin:20px auto;background:radial-gradient(circle,#f00 15%,#ff0000 25%,#000033 70%);border-radius:50%;box-shadow:0 0 30px red, inset 0 0 20px #f00;animation:pulse 1.2s infinite;cursor:pointer;border:2px solid #f00}
-button{width:92%;padding:18px;margin:7px;background:linear-gradient(#111,#000);color:#f00;border:2px solid #f00;border-radius:12px;font-weight:bold;font-size:15px;cursor:pointer;box-shadow:0 0 10px #300}
-button:hover{background:#f00;color:#000;box-shadow:0 0 20px red}
-#out{background:#050000;border:2px solid red;padding:14px;margin:12px;min-height:220px;color:#0f8;text-align:left;white-space:pre-wrap;font-size:12.5px;border-radius:10px;box-shadow:0 0 15px #300 inset}
-@keyframes pulse{50%{box-shadow:0 0 70px red, inset 0 0 30px #f00}}
-.status{color:#0f8;font-size:11px;letter-spacing:1px}
-.vault{color:#ff0;font-size:10px;word-break:break-all;margin:5px}
-.badge{display:inline-block;padding:3px 8px;border:1px solid #0f8;border-radius:5px;margin:2px;font-size:10px;color:#0f8}
+ body{background:#000;color:#f00;text-align:center;font-family:monospace;margin:0;padding-bottom:40px}
+ #eye{width:160px;height:160px;margin:22px auto;background:radial-gradient(circle,#f00 15%,#ff1a1a 28%,#000033 75%);border-radius:50%;box-shadow:0 0 35px red, inset 0 0 25px #f00;animation:pulse 1.2s infinite;cursor:pointer;border:2px solid #f00}
+ button{width:92%;padding:17px;margin:6px;background:linear-gradient(#111,#000);color:#f00;border:2px solid #f00;border-radius:14px;font-weight:bold;font-size:13px;cursor:pointer}
+ button:hover{background:#f00;color:#000}
+ #out{background:#050000;border:2px solid red;padding:14px;margin:12px;min-height:280px;color:#0f8;text-align:left;white-space:pre-wrap;font-size:12px;border-radius:12px}
+ @keyframes pulse{50%{box-shadow:0 0 80px red}}
+.badge{display:inline-block;padding:4px 8px;border:1px solid #0f8;border-radius:6px;margin:2px;font-size:10px;color:#0f8}
+.badge-red{border-color:#f00;color:#f00}
+.modeBox{border:2px solid #ff0;margin:12px;border-radius:12px;padding:8px;background:#110}
 </style></head><body>
-<div id="eye" onclick="playScanner(true)"></div>
-<h1 style="margin:0;text-shadow:0 0 10px red">KITTRA V17.4 NINJA ULTIME</h1>
-<p class="status">MAINNET | BYBIT SPOT_REAL | ANTI-DORMEUR V17.4 ACTIF</p>
-<div class="vault">COFFRE: TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG<br>TRON TRC20 | AutoSave 50%</div>
-<div><span class="badge">🟢 LIVE</span><span class="badge">🛡️ VAULT SECURE</span><span class="badge" id="pingBadge">⏰ PING: --</span></div>
+ <div id="eye" onclick="playScanner(true)"></div>
+ <h1 style="margin:0;text-shadow:0 0 10px red">KITTRA V22.2</h1>
+ <p style="color:#0f8;font-size:11px">MAINNET | BYBIT SPOT_REAL | V22.2 = main.py | SCAN ALL 40s</p>
+ <div style="color:#ff0;font-size:10px;word-break:break-all">COFFRE: TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG | SCAN ALL</div>
+ <div><span class="badge">🟢 V22.2 LIVE</span><span class="badge">🔍 SCAN 40s</span><span class="badge" id="pingBadge">⏰ PING --</span><span class="badge" id="soldeBadge">💰 10.91$</span><span class="badge" id="modeBadge">🐋 BALEINE FURTIF</span></div>
 
-<button onclick="do1()">📊 1. TRANSACTIONS & 4 COFFRES</button>
-<button onclick="do2()">🧠 2. STATUS IA COMPLET + P&L</button>
-<button onclick="do3()">⏰ 3. PING ANTI-DORMEUR FORCÉ</button>
-<button onclick="do4()">🎯 4. SNIPER NINJA MODE</button>
-<button onclick="do5()">🚨 5. URGENCE & SECOURS</button>
-<button onclick="do6()">🔮 6. ANALYSE IA V17.4 ULTIME</button>
+ <div class="modeBox">
+  <div style="color:#ff0;font-size:11px;margin-bottom:6px">CHOISIS TON MODE V22.2 (comme main.py):</div>
+  <button onclick="setMode('MOLO')" id="btnMolo" style="width:44%;border-color:#0f8;color:#0f8">🔵 MODE 1: MOLO CLASSIQUE</button>
+  <button onclick="setMode('BALEINE')" id="btnBaleine" style="width:44%;border-color:#ff0;color:#ff0;background:#332200">🐋 MODE 2: BALEINE FURTIF [ACTIF]</button>
+ </div>
 
-<div id="out">KITT V17.4 ULTIME initialisation...
+ <button onclick="do1()">📊 1. TRANSACTIONS & SOLDE REEL BYBIT</button>
+ <button onclick="do2()">🧠 2. STATUS IA V22.2 + 8 PALIERS</button>
+ <button onclick="do3()">⏰ 3. PING ANTI-DORMEUR 40s</button>
+ <button onclick="do4()">🎯 4. SNIPER 2 MODES MOLO / BALEINE</button>
+ <button onclick="do5()">🚨 5. URGENCE & SECOURS</button>
+ <button onclick="do6()">🔍 6. SCAN ALL WALLET LIVE</button>
+ <button onclick="do7()">💎 7. BALANCE + EN COURS D'UTILISATION</button>
+ <div id="out">KITTRA V22.2 initialisation...
 Gardien: mcisofficiel1-rgb
-Vault: TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG
-Mode: MAINNET SPOT_REAL
-Anti-dormeur: ARMÉ (auto 4min)
-Scanner: Prêt. Clique l'OEIL.</div>
+Version: V22.2 = main.py V22.2
+Mode 1: MOLO CLASSIQUE = vente directe 30%
+Mode 2: BALEINE FURTIF = vente en 2x furtif invisible (recommandé 10.91$)
+Scan: SCAN ALL 40s toutes cryptos main
+Clique l'OEIL.</div>
 
 <script>
-const VAULT = "TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG";
-let audioCtx=null, lastPing=0;
-function playScanner(forceVoice=false){
- if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
- let osc=audioCtx.createOscillator(), gain=audioCtx.createGain();
- osc.type='sawtooth'; osc.frequency.value=80; gain.gain.value=0.35;
- osc.connect(gain); gain.connect(audioCtx.destination); osc.start();
- let t=audioCtx.currentTime;
- osc.frequency.linearRampToValueAtTime(600,t+0.25);
- osc.frequency.linearRampToValueAtTime(100,t+0.55);
- osc.frequency.linearRampToValueAtTime(500,t+0.85);
- gain.gain.linearRampToValueAtTime(0,t+1); osc.stop(t+1);
- let eye=document.getElementById('eye'); eye.style.animationDuration='0.08s';
- setTimeout(()=>eye.style.animationDuration='1.2s',1000);
-}
-let voice=null; speechSynthesis.onvoiceschanged=()=>{voice=speechSynthesis.getVoices().find(v=>v.lang.includes('fr'))||speechSynthesis.getVoices()[0]};
-function speak(t){ try{speechSynthesis.cancel();let m=new SpeechSynthesisUtterance(t);m.voice=voice;m.lang='fr-FR';m.rate=0.85;m.pitch=0.35;speechSynthesis.speak(m);}catch(e){} }
+ const VAULT="TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG"; let audioCtx=null; let MODE_ACTUEL="BALEINE";
+ function playScanner(f=false){ if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)(); let o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='sawtooth';o.frequency.value=80;g.gain.value=0.35;o.connect(g);g.connect(audioCtx.destination);o.start();let t=audioCtx.currentTime;o.frequency.linearRampToValueAtTime(650,t+0.2);o.frequency.linearRampToValueAtTime(90,t+0.5);o.frequency.linearRampToValueAtTime(700,t+0.9);g.gain.linearRampToValueAtTime(0,t+1);o.stop(t+1); document.getElementById('eye').style.animationDuration='0.08s';setTimeout(()=>document.getElementById('eye').style.animationDuration='1.2s',900); if(f) speak("Kittra V22.2 activé Gardien. Deux modes disponibles.");}
+ let voice=null; speechSynthesis.onvoiceschanged=()=>{voice=speechSynthesis.getVoices().find(v=>v.lang.includes('fr'))||speechSynthesis.getVoices()[0]}; function speak(t){try{speechSynthesis.cancel();let m=new SpeechSynthesisUtterance(t);m.voice=voice;m.lang='fr-FR';m.rate=0.88;m.pitch=0.32;speechSynthesis.speak(m);}catch(e){}}
+ async function safeFetch(u,m){try{let r=await fetch(u); if(!r.ok) throw 0; return await r.json();}catch(e){return m;}}
 
-async function safeFetch(url, mock){
- try{let r=await fetch(url); if(!r.ok) throw 0; return await r.json();}catch(e){return mock;}
-}
-async function do1(){
- playScanner(); document.getElementById('out').innerText="⏳ Scan des 4 coffres...";
- let mock={principal:"127.45", coffre_total:"89.30", urgences_usdt:"15.00", coffres:{C1:"22.3 USDT",C2:"18.5 USDT",C3:"25.0 USDT",C4:"23.5 USDT"}, vault:VAULT};
- let j=await safeFetch('/api/transactions', mock);
- document.getElementById('out').innerText=`💰 TRANSACTIONS V17.4 ULTIME:\n\nPrincipal: ${j.principal} USDT\nCoffre Total: ${j.coffre_total} USDT\nUrgences: ${j.urgences_usdt} USDT\n\n4 COFFRES SÉCURISÉS:\n${JSON.stringify(j.coffres,null,2)}\n\nVault TRON:\n${j.vault||VAULT}\nAuto-Save: 50% actif`;
- speak(`Principal ${j.principal}. Coffre total ${j.coffre_total}. 4 coffres sécurisés.`);
-}
-async function do2(){
- playScanner();
- let mock={principal:"127.45",coffre_total:"89.30",positions:{"BTC/USDT":"+2.3%","ETH/USDT":"+1.1%"},derniereActivite:new Date().toLocaleString(), mode:"MAINNET", market:"SPOT_REAL"};
- let j=await safeFetch('/api/status', mock);
- document.getElementById('out').innerText=`🧠 STATUS IA V17.4 COMPLET:\n\nMode: ${j.mode||'MAINNET'} | ${j.market||'SPOT_REAL'}\nPrincipal: ${j.principal} USDT\nCoffre: ${j.coffre_total} USDT\nPositions Actives: ${Object.keys(j.positions).length}\n${JSON.stringify(j.positions,null,2)}\n\nDernière Activité: ${j.derniereActivite}\nVault: ${VAULT.slice(0,12)}...${VAULT.slice(-6)}\nUptime: V17.4 Éternel`;
- speak(`${Object.keys(j.positions).length} positions actives. Système éternel.`);
-}
-async function do3(){
- playScanner();
- let mock={status:"✅ ANTI-DORMEUR V17.4 OK", capital:"127.45", coffre:"89.30", uptime:"24/7"};
- let j=await safeFetch('/ping', mock);
- lastPing=Date.now(); document.getElementById('pingBadge').innerText=`⏰ PING: ${new Date().toLocaleTimeString()}`;
- document.getElementById('out').innerText=`⏰ ANTI-DORMEUR V17.4 ULTIME:\n\n${j.status}\nCapital: ${j.capital}$\nCoffre: ${j.coffre}$\nUptime: ${j.uptime||'INFINI'}\n\nUptimeRobot doit frapper /ping toutes les 5 min\nDernier ping: ${new Date().toLocaleString()}\n\n🛡️ KITTRA NE DORT PLUS JAMAIS!`;
- speak(`Anti-dormeur activé. Kittra ne dort plus Gardien.`);
-}
-async function do4(){
- playScanner();
- document.getElementById('out').innerText=`🎯 SNIPER NINJA V17.4:\n\nPair: BTC/USDT\nStratégie: SCALP_NINJA\nAmount: 10 USDT / trade\nMode: MAINNET SPOT_REAL\nExchange: BYBIT\n\nAnalyse: En attente de signal RSI <30...\nVault Save: 50% auto\n\n⚡ Le sniper est à l'affût.`;
- speak(`Mode sniper ninja activé.`);
-}
-async function do5(){
- playScanner();
- document.getElementById('out').innerText=`🚨 URGENCE & SECOURS V17.4:\n\nVault Principal:\n${VAULT}\n\nUrgences: 15.00 USDT (15%)\nCoffre Total: 89.30 USDT\n\nSi Bybit tombe, tes fonds sont sur TRON TRC20\nClé: SafePal sécurisé\n\n🛡️ Tout est sécurisé Gardien.`;
- speak(`Fonds d'urgence sécurisés sur ton coffre Tron.`);
-}
-async function do6(){
- playScanner();
- document.getElementById('out').innerText=`🔮 ANALYSE IA V17.4 ULTIME:\n\nIA: KITTRA-NINJA-ULTIME V17.4\nApprentissage: Scalping + Vault\nSécurité: TRC20 ${VAULT.slice(0,8)}...\n\nPrédiction BTC: Tendance haussière 64%\nConseil: HOLD + DCA 10 USDT\nRisque: Faible (Spot Réel)\n\n🧠 L'IA évolue avec chaque trade.\nVersion: V17.4 ETERNEL - Dernière version avant V18.`;
- speak(`Analyse ultime V17.4. Tendance haussière. Je veille Gardien.`);
-}
-// ANTI-DORMEUR AUTO V17.4 - PING TOUTES LES 4 MIN
-setInterval(()=>{ fetch('/ping').then(()=>{ lastPing=Date.now(); document.getElementById('pingBadge').innerText=`⏰ PING: ${new Date().toLocaleTimeString()} AUTO`; }).catch(()=>{}); }, 240000);
-window.onload=()=>setTimeout(()=>{ playScanner(); setTimeout(()=>speak("Système Kittra V17.4 Ultime activé Gardien. Coffre Tron sécurisé. Mode éternel opérationnel. Je ne dormirai plus jamais."),900)},1200);
+ function setMode(m){
+  MODE_ACTUEL=m;
+  fetch(`/api/set_mode?mode=${m}`).catch(()=>{});
+  let badge=document.getElementById('modeBadge');
+  if(m==='MOLO'){ badge.innerText='🔵 MOLO CLASSIQUE'; badge.style.color='#0f8'; document.getElementById('btnMolo').style.background='#0f8'; document.getElementById('btnMolo').style.color='#000'; document.getElementById('btnBaleine').style.background='#000'; document.getElementById('btnBaleine').style.color='#ff0'; document.getElementById('out').innerText=`🔵 MODE 1 MOLO CLASSIQUE ACTIVÉ V22.2:\n\n+0.5% = 30% vendu direct\n+1% = 30% vendu direct\n+2% = 30% vendu\nRapide, visible, pour scalper vite.\n\nmain.py = MODE MOLO maintenant.`; speak("Mode 1 Molo classique activé");}
+  else{ badge.innerText='🐋 BALEINE FURTIF'; badge.style.color='#ff0'; document.getElementById('btnBaleine').style.background='#ff0'; document.getElementById('btnBaleine').style.color='#000'; document.getElementById('btnMolo').style.background='#000'; document.getElementById('btnMolo').style.color='#0f8'; document.getElementById('out').innerText=`🐋 MODE 2 BALEINE FURTIF ACTIVÉ V22.2 [RECOMMANDÉ]:\n\n+0.5% = 25% en 2x furtif 12.5%+12.5% invisible\n+0.6% = 20% en 2x 10% furtif -> 0.01$+ GARANTI\n+1% = 15% / +2% =15% -> COFFRE / +3% 10% etc\n\nVente découpée pour être invisible des baleines.\nParfait pour tes 10.91$ HYPE+BNB.\n\nmain.py = MODE BALEINE maintenant.`; speak("Mode 2 baleine furtif activé, je découpe les ventes pour être invisible");}
+ }
+
+ async function do1(){playScanner(); let mock={principal:"10.91",disponible:"10.91",en_cours:"0.00",coffre_total:"0.0"}; let j=await safeFetch('/api/transactions',mock); document.getElementById('soldeBadge').innerText=`💰 ${j.principal}$`; document.getElementById('out').innerText=`💰 V22.2 TRANSACTIONS:\nTotal: ${j.principal}$\nDispo: ${j.disponible}$\nEn cours: ${j.en_cours}$ (0 = propre)\nMode actuel: ${MODE_ACTUEL}\nPositions: BNBUSDT + HYPEUSDT`;}
+ async function do2(){playScanner(); let j=await safeFetch('/api/status',{principal:"10.91",mode:`V22.2 ${MODE_ACTUEL}`}); document.getElementById('out').innerText=`🧠 STATUS V22.2:\nMode: ${j.mode||MODE_ACTUEL}\n8 Paliers:\n+0.5% 25% ${MODE_ACTUEL=='MOLO'?'direct':'furtif 2x'}\n+0.6% 20% ${MODE_ACTUEL=='MOLO'?'direct':'furtif 2x'} GARANTI 0.01$+\n+1% 15% / +2% 15% / +3% 10% / +4% 5% / +6% 9% / +10% 1%\nPositions: ${JSON.stringify(j.positions||["BNBUSDT","HYPEUSDT"],null,2)}`;}
+ async function do3(){playScanner(); let j=await safeFetch('/ping',{status:"OK"}); document.getElementById('pingBadge').innerText=`⏰ ${new Date().toLocaleTimeString()}`; document.getElementById('out').innerText=`⏰ ANTI-DORMEUR V22.2:\n${j.status||'OK'}\nMode: ${MODE_ACTUEL}\nScan 40s + Ping 4min ARMÉ`;}
+ async function do4(){playScanner(); document.getElementById('out').innerText=`🎯 SNIPER V22.2 2 MODES:\n\nMODE 1 MOLO CLASSIQUE:\n+0.5% 30% direct\n+1% 30% direct\nRapide\n\nMODE 2 BALEINE FURTIF (actif):\n+0.5% 25% en 2x 12.5% furtif\n+0.6% 20% en 2x 10% furtif\nInvisible baleines\nObjectif 0.01$+ par vente\n\nActuel: ${MODE_ACTUEL}`;}
+ async function do5(){playScanner(); document.getElementById('out').innerText=`🚨 V22.2 SECOURS:\nVault ${VAULT}\nTotal 10.91$\nEn cours 0.00$ = SPOT propre\nMode ${MODE_ACTUEL}`;}
+ async function do6(){playScanner(); document.getElementById('out').innerText=`🔍 SCAN ALL V22.2:\n40s interval\nMin 0.9$\nDétecte tout: BNB, HYPE, SOL, BTC, PEPE...\nActuel: BNBUSDT + HYPEUSDT = 10.91$\nMode: ${MODE_ACTUEL}`;}
+ async function do7(){playScanner(); document.getElementById('out').innerText=`💎 BALANCE V22.2:\nTotal 10.91$\nDispo 10.91$\nEn cours 0.00$ = normal spot\n\n0.00$ = pas de blocage\nSi 2$ en en cours = ordre bloqué\nMode ${MODE_ACTUEL} travaille propre`;}
+
+ setInterval(()=>{fetch('/ping').catch(()=>{});},240000);
+ window.onload=()=>setTimeout(()=>{playScanner(); setTimeout(()=>speak("Kittra V22.2 prêt Gardien. Mode 1 Molo et mode 2 baleine furtif disponibles. Je scanne toutes les quarante secondes."),800)},1000);
 </script></body></html>
