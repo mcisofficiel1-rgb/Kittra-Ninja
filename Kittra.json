@@ -1,44 +1,77 @@
 {
-  "BOT_NAME": "KITTRA-NINJA-V20.4.1-FIX",
-  "MODE": "MOLO_NINJA_MEGA_ADAPTATIF",
-  "VERSION": "20.4.1",
+  "BOT_NAME": "KITTRA-NINJA-V22.2-SCAN-ALL",
+  "MODE": "MOLO_BALEINE_FURTIF_SCAN_ALL_CRYPTO",
+  "VERSION": "22.2",
   "EXCHANGE": "BYBIT",
   "MARKET": "SPOT_REAL",
   "testnet": false,
   "INTELLIGENCE": {
-    "type": "META_AI_ADAPTATIVE",
+    "type": "META_AI_ADAPTATIVE_AUTO",
     "seuil_actuel": "50% car capital <20$",
-    "logique": "50% = 5-7 trades/jour, 60% = 2-4 trades, 70% = 1 trade"
+    "logique": "50% = 5-7 trades/jour, scan toutes 40s"
   },
   "trading": {
     "enabled": true,
-    "autonomie": "Multi-crypto auto selon capital",
-    "auto_coins_by_capital": {
-      "0-20$": ["BNBUSDT"],
-      "20-50$": ["BNBUSDT", "SOLUSDT"],
-      "50-100$": ["BNBUSDT", "SOLUSDT", "BTCUSDT"],
-      "100$+": ["BNBUSDT", "SOLUSDT", "BTCUSDT", "XRPUSDT", "DOGEUSDT"]
-    },
+    "autonomie": "SCAN ALL WALLET 40s - TOUTES CRYPTOS MAIN",
+    "scan_all": true,
+    "scan_interval_seconds": 40,
+    "ignore_coins": ["USDT", "USDC"],
+    "min_valeur_usdt": 0.9,
     "amount_usdt": 5,
-    "strategy": "MOLO +0.5 +1 +2 +3 +4 +5 +6 +10",
+    "strategy": "MOLO BALEINE FURTIF 8 PALIERS SURVEILLANCE AUTO",
     "niveaux_vente": {
-      "+0.5%": "30% vendu",
-      "+1%": "30% vendu -> 50% COFFRE",
-      "+2%": "30% vendu -> BONUS",
-      "+3%": "30% vendu -> COFFRE",
-      "+4%": "40% vendu -> COFFRE",
-      "+5%": "50% vendu -> COFFRE",
-      "+6%": "99% vendu -> BONUS",
-      "+10%": "100% JACKPOT"
+      "+0.5%": "25% vendu furtif",
+      "+0.6%": "20% vendu -> 0.01$+ GARANTI",
+      "+1.0%": "15% vendu",
+      "+2%": "15% -> COFFRE",
+      "+3%": "10% -> COFFRE",
+      "+4%": "5% -> COFFRE",
+      "+6%": "9% -> BONUS",
+      "+10%": "1% JACKPOT"
     }
   },
   "vault": {
     "VAULT_ADDRESS": "TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG",
     "coffre_total": 0.0,
-    "wallet_perso": {"bonus": 0.0}
+    "wallet_perso": {
+      "bonus": 0.0
+    }
   },
-  "positions": {},
-  "stats": {"trades": 0, "win": 0, "profit_total": 0.0},
+  "positions": {
+    "BNBUSDT": {
+      "entry_price": 774.6,
+      "qty": 0.0063801,
+      "molo_05": false,
+      "molo_06": false,
+      "molo_10": false,
+      "molo_20": false,
+      "molo_30": false,
+      "molo_40": false,
+      "molo_60": false,
+      "molo_100": false,
+      "source": "MANUAL_SCAN_ALL"
+    },
+    "HYPEUSDT": {
+      "entry_price": 91.9,
+      "qty": 0.053946,
+      "molo_05": false,
+      "molo_06": false,
+      "molo_10": false,
+      "molo_20": false,
+      "molo_30": false,
+      "molo_40": false,
+      "molo_60": false,
+      "molo_100": false,
+      "source": "MANUAL_SCAN_ALL"
+    }
+  },
+  "stats": {
+    "trades": 0,
+    "win": 0,
+    "profit_total": 0.0
+  },
   "coffre": 0.0,
-  "wallet_perso": {"bonus": 0.0}
+  "wallet_perso": {
+    "bonus": 0.0
+  }
 }
