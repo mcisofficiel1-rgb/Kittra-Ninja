@@ -1,1 +1,7 @@
-
+__pycache__/
+*.pyc
+.env
+memoire_spark.json
+coffre.json
+*.log
+venv/
