@@ -1,48 +1,37 @@
 {
-  "name": "KITTRA NINJA V17.4 ULTIME ETERNEL",
-  "short_name": "KITTRA V17.4",
+  "name": "KITTRA V23 FINAL",
+  "short_name": "KITTRA",
+  "description": "KITTRA V23 FINAL - MUSE SPARK + LLAMA 3.3 + TWAP BALEINE FURTIF - BYBIT SPOT",
+  "version": "V23",
   "start_url": "/",
-  "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#000000",
   "theme_color": "#ff0000",
-  "description": "Bot Bybit MAINNET Anti-Dormeur V17.4 - Vault TRON TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG - Eternel",
-  "categories": ["finance", "trading", "utilities"],
-  "lang": "fr",
-  "dir": "ltr",
+  "orientation": "portrait",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/4712/4712027.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "https://cdn-icons-png.flaticon.com/512/4712/4712027.png",
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='red'/></svg>",
       "sizes": "192x192",
-      "type": "image/png",
+      "type": "image/svg+xml",
       "purpose": "any maskable"
     },
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/4712/4712027.png",
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='red'/></svg>",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ],
   "shortcuts": [
     {
-      "name": "Ping Anti-Dormeur",
-      "short_name": "Ping",
-      "url": "/ping",
-      "description": "Réveille KITTRA"
+      "name": "SCAN ALL",
+      "url": "/?action=scan",
+      "description": "Lance SCAN ALL 40s"
     },
     {
-      "name": "Status Complet",
-      "short_name": "Status",
-      "url": "/api/status",
-      "description": "Voir le coffre"
+      "name": "SOLDE REEL",
+      "url": "/?action=solde",
+      "description": "Voir solde Bybit"
     }
   ]
-}
+    }
