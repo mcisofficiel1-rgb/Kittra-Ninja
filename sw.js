@@ -1,83 +1,53 @@
-// KITTRA V22.2 NINJA - Service Worker ULTIME SCAN ALL 40s - 2 MODES
-const CACHE_NAME = 'kittra-v22-2-scan-all-puissance';
-const VAULT = 'TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG';
-const VERSION = 'V22.2';
-const SCAN_INTERVAL = 40 * 1000; // 40s comme main.py
-const PING_INTERVAL = 4 * 60 * 1000; // 4 min anti-dormeur
+// KITTRA V23 FINAL - Service Worker Anti-Dormeur + PWA
+const CACHE_NAME = 'kittra-v23-final';
+const URLS_TO_CACHE = ['/', '/index.html', '/manifest.json', '/kittra.json'];
 
-console.log(`🔥 KITTRA ${VERSION} SW PUISSANCE CHARGÉ - Vault:`, VAULT);
-
-self.addEventListener('install', e => {
-  console.log(`🚀 KITTRA ${VERSION} INSTALL - 2 MODES MOLO/BALEINE - SCAN ALL 40s`);
-  self.skipWaiting();
-  // Pré-cache HLM V22.2
-  e.waitUntil(
+self.addEventListener('install', event => {
+  event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(['/','/index.html']).catch(()=>{});
+      console.log('KITTRA V23 Cache ouvert');
+      return cache.addAll(URLS_TO_CACHE);
     })
   );
+  self.skipWaiting();
 });
 
-self.addEventListener('activate', e => {
-  console.log(`⚡ KITTRA ${VERSION} ACTIVATE - Eternel SCAN ALL 40s - Gardien mcisofficiel1`);
-  e.waitUntil(
-    caches.keys().then(keys => Promise.all(
-      keys.filter(k => k !== CACHE_NAME).map(k => {
-        console.log(`🗑️ Suppression ancien cache: ${k}`);
-        return caches.delete(k);
-      })
-    )).then(() => {
-      self.clients.claim();
-      // LANCE ANTI-DORMEUR V22.2 IMMEDIAT
-      startKeepAlive();
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys => {
+      return Promise.all(keys.map(k => { if(k !== CACHE_NAME) return caches.delete(k); }));
     })
   );
+  self.clients.claim();
 });
 
-// ===== COEUR V22.2 - NE JAMAIS CACHER LES ROUTES CRITIQUES =====
-self.addEventListener('fetch', e => {
-  const url = e.request.url;
-  
-  // V22.2 BOOST: Routes critiques = JAMAIS en cache, toujours LIVE
-  if(url.includes('/api/') || url.includes('/ping') || url.includes('/health') || url.includes('/set_mode')) {
-    return e.respondWith(
-      fetch(e.request, {cache:'no-store', headers:{'Cache-Control':'no-cache','X-Kittra-Version':VERSION,'X-Kittra-Mode':'SCAN-ALL'}})
-        .then(res => {
-          console.log(`🔍 KITTRA ${VERSION} LIVE FETCH:`, url.split('/').pop());
-          return res;
-        })
-        .catch(() => {
-          // Si API dort, on renvoie Vault secure mais on alerte
-          return new Response(JSON.stringify({ 
-            status: `KITTRA ${VERSION} OFFLINE mais VAULT SECURE + SCAN ALL EN ATTENTE`, 
-            vault: VAULT, 
-            capital: "SECURE", 
-            mode: "BALEINE_FURTIF",
-            scan_interval: "40s",
-            error: "API dort, mais coffre TRON intact + Service Worker garde en vie",
-            retry_in: "40s"
-          }), {headers: {'Content-Type': 'application/json','X-Kittra-SW':VERSION}})
-        )
-    );
+self.addEventListener('fetch', event => {
+  // Ne cache pas les API, toujours frais
+  if(event.request.url.includes('/etat') || event.request.url.includes('/ping') || event.request.url.includes('/scan') || event.request.url.includes('/api/')){
+    event.respondWith(fetch(event.request).catch(()=>caches.match('/index.html')));
+    return;
   }
-  
-  // Pour le HLM V22.2: Network first, puis cache, puis offline
-  e.respondWith(
-    fetch(e.request)
-      .then(res => {
-        // Sauvegarde que si c'est HLM, pas API
-        if(res.ok && !url.includes('/api/')) {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
-        }
-        return res;
-      })
-      .catch(() => {
-        return caches.match(e.request).then(cached => {
-          if(cached) {
-            console.log(`📦 CACHE HIT V22.2:`, url);
-            return cached;
-          }
-          // Offline total - HLM minimal V22.2
-          return new Response(`
-            <html><body style="background:#000;color:#f
+  event.respondWith(
+    caches.match(event.request).then(res => {
+      return res || fetch(event.request);
+    })
+  );
+});
+
+// PING ANTI-DORMEUR toutes les 3 min même si onglet fermé
+setInterval(() => {
+  fetch('/ping').catch(()=>{});
+  console.log('KITTRA V23 PING anti-dormeur');
+}, 180000); // 3 min
+
+// Notification si trade
+self.addEventListener('push', event => {
+  const data = event.data ? event.data.text() : 'KITTRA V23 Trade';
+  event.waitUntil(
+    self.registration.showNotification('KITTRA V23', {
+      body: data,
+      icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='red'/></svg>",
+      vibrate: [200,100,200]
+    })
+  );
+});
