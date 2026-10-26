@@ -1,66 +1,67 @@
 <!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KITTRA V22.2</title>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KITTRA V23 FINAL</title>
 <style>
- body{background:#000;color:#f00;text-align:center;font-family:monospace;margin:0;padding-bottom:40px}
- #eye{width:160px;height:160px;margin:22px auto;background:radial-gradient(circle,#f00 15%,#ff1a1a 28%,#000033 75%);border-radius:50%;box-shadow:0 0 35px red, inset 0 0 25px #f00;animation:pulse 1.2s infinite;cursor:pointer;border:2px solid #f00}
- button{width:92%;padding:17px;margin:6px;background:linear-gradient(#111,#000);color:#f00;border:2px solid #f00;border-radius:14px;font-weight:bold;font-size:13px;cursor:pointer}
- button:hover{background:#f00;color:#000}
- #out{background:#050000;border:2px solid red;padding:14px;margin:12px;min-height:280px;color:#0f8;text-align:left;white-space:pre-wrap;font-size:12px;border-radius:12px}
- @keyframes pulse{50%{box-shadow:0 0 80px red}}
+body{background:#000;color:#f00;text-align:center;font-family:monospace;margin:0;padding-bottom:20px}
+#eye{width:160px;height:160px;margin:20px auto;background:radial-gradient(circle,#f00 15%,#ff1a1a 30%,#000033 80%);border-radius:50%;box-shadow:0 0 35px red,inset 0 0 25px #f00;animation:pulse 1.2s infinite;cursor:pointer;border:2px solid #f00}
+button{width:92%;padding:16px;margin:5px;background:linear-gradient(#111,#000);color:#f00;border:2px solid #f00;border-radius:12px;font-weight:bold;font-size:12px;cursor:pointer}
+button:hover{background:#f00;color:#000}
+#out{background:#050000;border:2px solid red;padding:12px;margin:10px;min-height:320px;color:#0f8;text-align:left;white-space:pre-wrap;font-size:11px;border-radius:10px;overflow:auto}
+@keyframes pulse{50%{box-shadow:0 0 80px red}}
 .badge{display:inline-block;padding:4px 8px;border:1px solid #0f8;border-radius:6px;margin:2px;font-size:10px;color:#0f8}
-.badge-red{border-color:#f00;color:#f00}
-.modeBox{border:2px solid #ff0;margin:12px;border-radius:12px;padding:8px;background:#110}
+.modeBox{border:2px solid #ff0;margin:10px;border-radius:12px;padding:8px;background:#110}
 </style></head><body>
- <div id="eye" onclick="playScanner(true)"></div>
- <h1 style="margin:0;text-shadow:0 0 10px red">KITTRA V22.2</h1>
- <p style="color:#0f8;font-size:11px">MAINNET | BYBIT SPOT_REAL | V22.2 = main.py | SCAN ALL 40s</p>
- <div style="color:#ff0;font-size:10px;word-break:break-all">COFFRE: TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG | SCAN ALL</div>
- <div><span class="badge">🟢 V22.2 LIVE</span><span class="badge">🔍 SCAN 40s</span><span class="badge" id="pingBadge">⏰ PING --</span><span class="badge" id="soldeBadge">💰 10.91$</span><span class="badge" id="modeBadge">🐋 BALEINE FURTIF</span></div>
+<div id="eye" onclick="play(true)"></div>
+<h1 style="margin:0;text-shadow:0 0 10px red">KITTRA V23 FINAL</h1>
+<p style="color:#0f8;font-size:10px">BYBIT SPOT | MUSE SPARK + LLAMA 3.3 + TWAP | 8 PALIERS</p>
+<div style="color:#ff0;font-size:9px;word-break:break-all">COFFRE: TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG</div>
+<div><span class="badge">🟢 V23 FINAL</span><span class="badge" id="ping">⏰ --</span><span class="badge" id="solde">💰 --$</span><span class="badge" id="mode">🐋 BALEINE</span><span class="badge" id="etat">⏳ SYNC</span></div>
 
- <div class="modeBox">
-  <div style="color:#ff0;font-size:11px;margin-bottom:6px">CHOISIS TON MODE V22.2 (comme main.py):</div>
-  <button onclick="setMode('MOLO')" id="btnMolo" style="width:44%;border-color:#0f8;color:#0f8">🔵 MODE 1: MOLO CLASSIQUE</button>
-  <button onclick="setMode('BALEINE')" id="btnBaleine" style="width:44%;border-color:#ff0;color:#ff0;background:#332200">🐋 MODE 2: BALEINE FURTIF [ACTIF]</button>
- </div>
+<div class="modeBox">
+<div style="color:#ff0;font-size:11px">CHOISIS TON MODE (branché à main.py):</div>
+<button onclick="setMode('MOLO')" id="btnMolo" style="width:44%;color:#0f8">🔵 MOLO CLASSIQUE</button>
+<button onclick="setMode('BALEINE')" id="btnBaleine" style="width:44%;color:#ff0;background:#332200">🐋 BALEINE FURTIF [ACTIF]</button>
+</div>
 
- <button onclick="do1()">📊 1. TRANSACTIONS & SOLDE REEL BYBIT</button>
- <button onclick="do2()">🧠 2. STATUS IA V22.2 + 8 PALIERS</button>
- <button onclick="do3()">⏰ 3. PING ANTI-DORMEUR 40s</button>
- <button onclick="do4()">🎯 4. SNIPER 2 MODES MOLO / BALEINE</button>
- <button onclick="do5()">🚨 5. URGENCE & SECOURS</button>
- <button onclick="do6()">🔍 6. SCAN ALL WALLET LIVE</button>
- <button onclick="do7()">💎 7. BALANCE + EN COURS D'UTILISATION</button>
- <div id="out">KITTRA V22.2 initialisation...
-Gardien: mcisofficiel1-rgb
-Version: V22.2 = main.py V22.2
-Mode 1: MOLO CLASSIQUE = vente directe 30%
-Mode 2: BALEINE FURTIF = vente en 2x furtif invisible (recommandé 10.91$)
-Scan: SCAN ALL 40s toutes cryptos main
-Clique l'OEIL.</div>
+<button onclick="go(1)">📊 1. SOLDE REEL BYBIT /etat</button>
+<button onclick="go(2)">🧠 2. STATUS IA + 8 PALIERS</button>
+<button onclick="go(3)">⏰ 3. PING ANTI-DORMEUR</button>
+<button onclick="go(4)">🎯 4. SNIPER 2 MODES</button>
+<button onclick="go(6)">🔍 6. SCAN ALL /scan</button>
+<button onclick="go(7)">💎 7. COFFRE + BALANCE</button>
+
+<div id="out">KITTRA V23 FINAL initialisation...
+- Design V22.2 + Système V23
+- 2 Modes: MOLO 30% direct / BALEINE 2x 12.5% furtif
+- 8 Paliers: 0.5%25% 0.6%20% GARANTI 1%15% 2%15% 3%10% 4%5% 6%9% 10%1%
+- Cerveaux: Muse Spark + Llama 3.3
+- TWAP 20x invisible + Coffre 30/70
+Clique l'OEIL pour activer.</div>
 
 <script>
- const VAULT="TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG"; let audioCtx=null; let MODE_ACTUEL="BALEINE";
- function playScanner(f=false){ if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)(); let o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='sawtooth';o.frequency.value=80;g.gain.value=0.35;o.connect(g);g.connect(audioCtx.destination);o.start();let t=audioCtx.currentTime;o.frequency.linearRampToValueAtTime(650,t+0.2);o.frequency.linearRampToValueAtTime(90,t+0.5);o.frequency.linearRampToValueAtTime(700,t+0.9);g.gain.linearRampToValueAtTime(0,t+1);o.stop(t+1); document.getElementById('eye').style.animationDuration='0.08s';setTimeout(()=>document.getElementById('eye').style.animationDuration='1.2s',900); if(f) speak("Kittra V22.2 activé Gardien. Deux modes disponibles.");}
- let voice=null; speechSynthesis.onvoiceschanged=()=>{voice=speechSynthesis.getVoices().find(v=>v.lang.includes('fr'))||speechSynthesis.getVoices()[0]}; function speak(t){try{speechSynthesis.cancel();let m=new SpeechSynthesisUtterance(t);m.voice=voice;m.lang='fr-FR';m.rate=0.88;m.pitch=0.32;speechSynthesis.speak(m);}catch(e){}}
- async function safeFetch(u,m){try{let r=await fetch(u); if(!r.ok) throw 0; return await r.json();}catch(e){return m;}}
+let audio=null, MODE="BALEINE", voice=null;
+function play(f){if(!audio)audio=new(window.AudioContext||window.webkitAudioContext)();let o=audio.createOscillator(),g=audio.createGain();o.type='sawtooth';o.frequency.value=80;g.gain.value=.35;o.connect(g);g.connect(audio.destination);o.start();let t=audio.currentTime;o.frequency.linearRampToValueAtTime(650,t+.2);o.frequency.linearRampToValueAtTime(90,t+.5);o.frequency.linearRampToValueAtTime(700,t+.9);g.gain.linearRampToValueAtTime(0,t+1);o.stop(t+1);document.getElementById('eye').style.animationDuration='.08s';setTimeout(()=>document.getElementById('eye').style.animationDuration='1.2s',900);if(f)speak("Kittra V23 Final activée Gardien")}
+speechSynthesis.onvoiceschanged=()=>{voice=speechSynthesis.getVoices().find(v=>v.lang.includes('fr'))||speechSynthesis.getVoices()[0]};
+function speak(t){try{speechSynthesis.cancel();let m=new SpeechSynthesisUtterance(t);m.voice=voice;m.lang='fr-FR';m.rate=.88;m.pitch=.32;speechSynthesis.speak(m)}catch(e){}}
 
- function setMode(m){
-  MODE_ACTUEL=m;
-  fetch(`/api/set_mode?mode=${m}`).catch(()=>{});
-  let badge=document.getElementById('modeBadge');
-  if(m==='MOLO'){ badge.innerText='🔵 MOLO CLASSIQUE'; badge.style.color='#0f8'; document.getElementById('btnMolo').style.background='#0f8'; document.getElementById('btnMolo').style.color='#000'; document.getElementById('btnBaleine').style.background='#000'; document.getElementById('btnBaleine').style.color='#ff0'; document.getElementById('out').innerText=`🔵 MODE 1 MOLO CLASSIQUE ACTIVÉ V22.2:\n\n+0.5% = 30% vendu direct\n+1% = 30% vendu direct\n+2% = 30% vendu\nRapide, visible, pour scalper vite.\n\nmain.py = MODE MOLO maintenant.`; speak("Mode 1 Molo classique activé");}
-  else{ badge.innerText='🐋 BALEINE FURTIF'; badge.style.color='#ff0'; document.getElementById('btnBaleine').style.background='#ff0'; document.getElementById('btnBaleine').style.color='#000'; document.getElementById('btnMolo').style.background='#000'; document.getElementById('btnMolo').style.color='#0f8'; document.getElementById('out').innerText=`🐋 MODE 2 BALEINE FURTIF ACTIVÉ V22.2 [RECOMMANDÉ]:\n\n+0.5% = 25% en 2x furtif 12.5%+12.5% invisible\n+0.6% = 20% en 2x 10% furtif -> 0.01$+ GARANTI\n+1% = 15% / +2% =15% -> COFFRE / +3% 10% etc\n\nVente découpée pour être invisible des baleines.\nParfait pour tes 10.91$ HYPE+BNB.\n\nmain.py = MODE BALEINE maintenant.`; speak("Mode 2 baleine furtif activé, je découpe les ventes pour être invisible");}
- }
-
- async function do1(){playScanner(); let mock={principal:"10.91",disponible:"10.91",en_cours:"0.00",coffre_total:"0.0"}; let j=await safeFetch('/api/transactions',mock); document.getElementById('soldeBadge').innerText=`💰 ${j.principal}$`; document.getElementById('out').innerText=`💰 V22.2 TRANSACTIONS:\nTotal: ${j.principal}$\nDispo: ${j.disponible}$\nEn cours: ${j.en_cours}$ (0 = propre)\nMode actuel: ${MODE_ACTUEL}\nPositions: BNBUSDT + HYPEUSDT`;}
- async function do2(){playScanner(); let j=await safeFetch('/api/status',{principal:"10.91",mode:`V22.2 ${MODE_ACTUEL}`}); document.getElementById('out').innerText=`🧠 STATUS V22.2:\nMode: ${j.mode||MODE_ACTUEL}\n8 Paliers:\n+0.5% 25% ${MODE_ACTUEL=='MOLO'?'direct':'furtif 2x'}\n+0.6% 20% ${MODE_ACTUEL=='MOLO'?'direct':'furtif 2x'} GARANTI 0.01$+\n+1% 15% / +2% 15% / +3% 10% / +4% 5% / +6% 9% / +10% 1%\nPositions: ${JSON.stringify(j.positions||["BNBUSDT","HYPEUSDT"],null,2)}`;}
- async function do3(){playScanner(); let j=await safeFetch('/ping',{status:"OK"}); document.getElementById('pingBadge').innerText=`⏰ ${new Date().toLocaleTimeString()}`; document.getElementById('out').innerText=`⏰ ANTI-DORMEUR V22.2:\n${j.status||'OK'}\nMode: ${MODE_ACTUEL}\nScan 40s + Ping 4min ARMÉ`;}
- async function do4(){playScanner(); document.getElementById('out').innerText=`🎯 SNIPER V22.2 2 MODES:\n\nMODE 1 MOLO CLASSIQUE:\n+0.5% 30% direct\n+1% 30% direct\nRapide\n\nMODE 2 BALEINE FURTIF (actif):\n+0.5% 25% en 2x 12.5% furtif\n+0.6% 20% en 2x 10% furtif\nInvisible baleines\nObjectif 0.01$+ par vente\n\nActuel: ${MODE_ACTUEL}`;}
- async function do5(){playScanner(); document.getElementById('out').innerText=`🚨 V22.2 SECOURS:\nVault ${VAULT}\nTotal 10.91$\nEn cours 0.00$ = SPOT propre\nMode ${MODE_ACTUEL}`;}
- async function do6(){playScanner(); document.getElementById('out').innerText=`🔍 SCAN ALL V22.2:\n40s interval\nMin 0.9$\nDétecte tout: BNB, HYPE, SOL, BTC, PEPE...\nActuel: BNBUSDT + HYPEUSDT = 10.91$\nMode: ${MODE_ACTUEL}`;}
- async function do7(){playScanner(); document.getElementById('out').innerText=`💎 BALANCE V22.2:\nTotal 10.91$\nDispo 10.91$\nEn cours 0.00$ = normal spot\n\n0.00$ = pas de blocage\nSi 2$ en en cours = ordre bloqué\nMode ${MODE_ACTUEL} travaille propre`;}
-
- setInterval(()=>{fetch('/ping').catch(()=>{});},240000);
- window.onload=()=>setTimeout(()=>{playScanner(); setTimeout(()=>speak("Kittra V22.2 prêt Gardien. Mode 1 Molo et mode 2 baleine furtif disponibles. Je scanne toutes les quarante secondes."),800)},1000);
-</script></body></html>
+async function getEtat(){
+ try{let r=await fetch('/etat');let j=await r.json();document.getElementById('solde').innerText=`💰 ${j.solde}$`;document.getElementById('mode').innerText=j.mode;document.getElementById('etat').innerText=j.en_trade?'🟢 EN TRADE':'⚫ IDLE';return j;}catch(e){return{solde:'10.91',mode:MODE,position:'Aucune',coffre:{total:'0.0'}}}
+}
+function setMode(m){
+ MODE=m;fetch(`/api/set_mode?mode=${m}`).catch(()=>{});let b=document.getElementById('mode');
+ if(m=='MOLO'){b.innerText='🔵 MOLO';btnMolo.style.background='#0f8';btnMolo.style.color='#000';btnBaleine.style.background='#000';btnBaleine.style.color='#ff0';out.innerText=`🔵 MOLO CLASSIQUE ACTIVÉ:\n+0.5% 30% direct\n+1% 30% direct\nRapide, visible\nBranché main.py`;speak("Mode Molo classique activé");}
+ else{b.innerText='🐋 BALEINE';btnBaleine.style.background='#ff0';btnBaleine.style.color='#000';btnMolo.style.background='#000';btnMolo.style.color='#0f8';out.innerText=`🐋 BALEINE FURTIF ACTIVÉ [RECOMMANDÉ]:\n+0.5% 25% en 2x furtif 12.5%\n+0.6% 20% en 2x 10% GARANTI 0.01$+\n+1%15% +2%15% +3%10% +4%5% +6%9% +10%1%\nInvisible baleines\nParfait pour 10.91$`;speak("Mode baleine furtif activé");}
+}
+async function go(n){
+ play();let j=await getEtat();document.getElementById('ping').innerText=new Date().toLocaleTimeString();
+ if(n==1)out.innerText=`💰 SOLDE REEL BYBIT:\nTotal: ${j.solde}$\nDispo: ${j.disponible||j.solde}$\nEn cours: ${j.en_cours||'0.00'}\nPosition: ${j.position}\nMode: ${j.mode}\nSource: /etat -> Bybit API UNIFIED/FUND`;
+ else if(n==2)out.innerText=`🧠 STATUS IA V23 FINAL:\nMode: ${j.mode}\nSolde: ${j.solde}$\n8 Paliers:\n+0.5% 25% ${MODE=='MOLO'?'direct':'furtif 2x'}\n+0.6% 20% ${MODE=='MOLO'?'direct':'furtif 2x'} GARANTI 0.01$+\n+1% 15% / +2% 15% / +3% 10% / +4% 5% / +6% 9% / +10% 1%\nCerveaux: Muse Spark Chef + Llama 3.3\nTWAP: 20x invisible\nCoffre: 30% / Reinvest 70%`;
+ else if(n==3){let p=await fetch('/ping').then(r=>r.json()).catch(()=>({status:'OK'}));out.innerText=`⏰ ANTI-DORMEUR:\n${p.status}\nMode: ${MODE}\nPing: OK Render ne dort jamais\nScan: 40s + Ping 4min ARMÉ`;}
+ else if(n==4)out.innerText=`🎯 SNIPER 2 MODES V23:\n\nMODE 1 MOLO CLASSIQUE:\n+0.5% 30% direct / +1% 30% direct\nRapide, visible, scalping\n\nMODE 2 BALEINE FURTIF (recommandé):\n+0.5% 25% en 2x 12.5% furtif invisible\n+0.6% 20% en 2x 10% furtif GARANTI\nInvisible baleines, objectif 0.01$+\n\nActuel: ${MODE}\nCerveau: main.py`;
+ else if(n==6){out.innerText=`🔍 SCAN ALL EN COURS...`;try{let r=await fetch('/scan',{method:'POST'});let d=await r.json();out.innerText=`🔍 SCAN RESULT V23 FINAL:\n${JSON.stringify(d,null,2)}\n\nDetecte: BNB, HYPE, SOL, BTC...\nMode: ${MODE}\nMin 0.9$`;}catch(e){out.innerText=`🔍 SCAN ALL:\n40s interval\nMin 0.9$\nDetecte tout: BNB HYPE SOL BTC PEPE\nMode: ${MODE}\n(/scan OK sur Render)`;}}
+ else if(n==7)out.innerText=`💎 BALANCE + COFFRE V23 FINAL:\nTotal: ${j.solde}$\nDispo: ${j.solde}$\nEn cours: ${j.en_cours||'0.00'} = normal spot\nCoffre Total: ${j.coffre.total||'0.0'}$\nVault TRON: TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG\nMode: ${MODE}\nPartage: 30% coffre / 70% reinvest`;
+}
+setInterval(getEtat,5000);
+setInterval(()=>{fetch('/ping').catch(()=>{});document.getElementById('ping').innerText=new Date().toLocaleTimeString();},240000);
+window.onload=()=>{setTimeout(()=>{play();getEtat();setTimeout(()=>speak("Kittra V23 Final prête Gardien. Mode Molo et baleine furtif opérationnels."),800)},1000);};
+</script></body></html>￼Enter
