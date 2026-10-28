@@ -1,8 +1,15 @@
 {
-  "name": "KITTRA V23 FINAL",
-  "version": "V23",
+  "name": "KITTRA V23 FINAL -> V26 NINJA",
+  "version": "V26",
+  "base_sur": "V23 FINAL",
   "mode_actuel": "BALEINE",
   "coffre": "TG8UcJUH152YyWsSArL4cwwV78GZiYJoqG",
+  "capital": {
+    "source": "BYBIT_AUTO",
+    "fallback": 10.91,
+    "bybit_keys": ["BYBIT_API_KEY", "BYBIT_API_SECRET"],
+    "auto_detect": true
+  },
   "modes": {
     "MOLO": {
       "description": "MOLO CLASSIQUE vente directe 30%",
@@ -27,12 +34,22 @@
       ]
     }
   },
+  "jours": {
+    "FAVORABLE_ACHAT": [1, 2, 3, 28, 29, 30],
+    "FAVORABLE_VENTE": [5, 6, 7, 8, 18, 19, 20, 21, 22, 25, 26, 27],
+    "ORDINAIRE": {"mise": 30, "action": "SCALP PRUDENT"}
+  },
   "cerveaux": ["Muse Spark Chef", "Llama 3.3 70B Free"],
+  "telegram": {
+    "auto_detect": ["TG_TOKEN", "TELEGRAM_BOT_TOKEN", "TG_CHAT_ID", "CHAT_ID", "TELEGRAM_CHAT_ID"],
+    "endpoints_test": "/test-telegram"
+  },
   "securites": {
     "kill_switch": "-5% jour",
     "twap": "20 morceaux 60-180s",
     "compounding": "30% coffre / 70% reinvest",
-    "anti_baleine": "volume >500k$ = ANNULE"
+    "anti_baleine": "volume >500k$ = ANNULE",
+    "crypto_meurt": "-3% en 15min = VENTE RAPIDE"
   },
-  "endpoints": ["/etat", "/scan", "/ping", "/api/transactions", "/api/status", "/api/set_mode"]
-}￼Enter
+  "endpoints": ["/", "/etat", "/scan-ninja", "/test-telegram", "/ping", "/bilan-journalier", "/bilan-hebdo", "/api/transactions", "/api/status", "/api/set_mode"]
+}
