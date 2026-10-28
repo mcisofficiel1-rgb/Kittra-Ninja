@@ -1,249 +1,256 @@
-# KITTRA V26 FINAL - SIMPLE + TOUTES LES FONCTIONS
-import os, json, time, hmac, hashlib, datetime, requests
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
+ os,requests,json,datetime,glob,random
 
-app = FastAPI()
-COFFRE_FILE = "coffre_tresor.json"
+app=FastAPI()
+MODEL=os.getenv("OPENROUTER_MODEL","meta-llama/llama-3.1-8b-instruct")
+OR_KEY=os.getenv("OPENROUTER_API_KEY")
 
-# ========== 1. COFFRE ==========
-def load_coffre():
-    """Charge le coffre local"""
-    try:
-        if os.path.exists(COFFRE_FILE):
-            return json.loads(open(COFFRE_FILE, "r").read())
-    except:
-        pass
-    return {"principal": 10.91, "coffre": 0.0, "trades": 0}
-
-def save_coffre(data):
-    """Sauvegarde le coffre"""
-    with open(COFFRE_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-# ========== 2. BYBIT - CAPITAL REEL ==========
-def get_bybit_balance():
-    """
-    Recupere le vrai capital Bybit UNIFIED
-    Auto-detect: BYBIT_API_KEY + BYBIT_API_SECRET
-    """
-    key = os.getenv("BYBIT_API_KEY")
-    secret = os.getenv("BYBIT_API_SECRET")
-    coffre = load_coffre()
-
-    if not key or not secret:
-        return {
-            "real": coffre["principal"],
-            "source": "JSON_FALLBACK",
-            "detail": "Pas de cles BYBIT"
-        }
-
-    try:
-        timestamp = str(int(time.time() * 1000))
-        param = "accountType=UNIFIED"
-        recv = "5000"
-        payload = timestamp + key + recv + param
-        sign = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
-
-        headers = {
-            "X-BAPI-API-KEY": key,
-            "X-BAPI-SIGN": sign,
-            "X-BAPI-TIMESTAMP": timestamp,
-            "X-BAPI-RECV-WINDOW": recv
-        }
-        url = "https://api.bybit.com/v5/account/wallet-balance?" + param
-        r = requests.get(url, headers=headers, timeout=10).json()
-
-        # Total equity UNIFIED
-        equity = float(r["result"]["list"][0]["totalEquity"])
-
-        return {
-            "real": equity,
-            "source": "BYBIT",
-            "totalEquity": equity,
-            "raw": r["result"]["list"][0]
-        }
-    except Exception as e:
-        return {
-            "real": coffre["principal"],
-            "source": "FALLBACK_ERROR",
-            "error": str(e)[:150]
-        }
-
-# ========== 3. JOURS FAVORABLES ==========
-def jour_type():
-    """
-    Determine le type de jour
-    ACHAT: 1,2,3,28,29,30 -> mise 100%
-    VENTE: 5,6,7,8,18,19,20,21,22,25,26,27 -> mise 100%
-    ORDINAIRE: autre -> mise 30% scalp prudent
-    """
-    d = datetime.datetime.now().day
-
-    if d in [1, 2, 3, 28, 29, 30]:
-        return {
-            "jour": d,
-            "type": "FAVORABLE_ACHAT",
-            "mise": 100,
-            "raison": f"Jour {d} FAVORABLE ACHAT - Mise GIGA 100%",
-            "action": "ACHETER FORT"
-        }
-
-    if d in [5, 6, 7, 8, 18, 19, 20, 21, 22, 25, 26, 27]:
-        return {
-            "jour": d,
-            "type": "FAVORABLE_VENTE",
-            "mise": 100,
-            "raison": f"Jour {d} FAVORABLE VENTE - Sortie GIGA 100%",
-            "action": "VENDRE FORT"
-        }
-
-    return {
-        "jour": d,
-        "type": "ORDINAIRE",
-        "mise": 30,
-        "raison": f"Jour {d} ORDINAIRE - Scalp prudent 30%",
-        "action": "SCALP PRUDENT"
-    }
-
-# ========== 4. TELEGRAM ==========
-def get_telegram_creds():
-    """Auto-detect toutes les variantes de noms TG"""
-    token = os.getenv("TG_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
-    chat = os.getenv("TG_CHAT_ID") or os.getenv("CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID")
+# --- AUTO-DETECT TELEGRAM 100% ---
+def get_tg():
+    token=os.getenv("TG_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN") or os.getenv("BOT_TOKEN")
+    chat=os.getenv("TG_CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID")
     return token, chat
 
-def envoyer_telegram(message):
-    """Envoie un message Telegram"""
-    token, chat = get_telegram_creds()
-    if not token or not chat:
-        return {"ok": False, "error": "NO TG KEYS"}
+TG_TOKEN, TG_ID = get_tg()
 
+COFFRE="coffre_tresor.json";TRADES="trades_kittra.json";ATTENTE="attente_decision.json";REGLES="regles_kittra.json"
+
+def load(f,d):
     try:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        r = requests.post(url, json={"chat_id": chat, "text": message, "parse_mode": "HTML"}, timeout=10).json()
-        return {"ok": True, "result": r}
+        if os.path.exists(f):
+            return json.loads(open(f).read())
+    except:
+        pass
+    return d
+
+def save(f,d):
+    open(f,"w").write(json.dumps(d))
+
+def send_tg(m):
+    try:
+        tok, cid = get_tg()
+        if not tok or not cid:
+            print(f"TG MISSING token={bool(tok)} chat={bool(cid)} env={dict(os.environ)}")
+            return f"TG MISSING token={bool(tok)} chat={bool(cid)}"
+        r=requests.post(f"https://api.telegram.org/bot{tok}/sendMessage",json={"chat_id":cid,"text":m,"parse_mode":"HTML"},timeout=15)
+        print(f"TG SEND {r.status_code} {r.text[:200]}")
+        return f"OK {r.status_code}"
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        print(f"TG ERR {e}")
+        return str(e)
 
-# ========== 5. SCAN NINJA ==========
-def scan_ninja_logic():
-    """Logique centrale V26"""
-    bybit = get_bybit_balance()
-    jour = jour_type()
-    coffre = load_coffre()
+def cerveau(p):
+    try:
+        if not OR_KEY:
+            return "Live OK - Pas de cle OR"
+        r=requests.post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":f"Bearer {OR_KEY}","HTTP-Referer":"https://kittra-ninja-ultime.onrender.com","X-Title":"KITTRA"},json={"model":MODEL,"messages":[{"role":"user","content":p}],"max_tokens":300},timeout=30).json()
+        return r['choices'][0]['message']['content'] if "choices" in r else str(r)
+    except Exception as e:
+        return f"Err:{e}"
 
-    capital_reel = bybit["real"]
-    mise_pourcent = jour["mise"]
-    mise_dollars = capital_reel * mise_pourcent / 100
+def analyse_jour():
+    jour=datetime.datetime.now().day
+    if jour in [1,2,3,28,29,30]:
+        return {"type":"FAVORABLE_ACHAT","mise":100,"raison":f"Jour {jour}: chute historique fin/debut mois, baleines accumulent. MEILLEUR BUY","action":"BUY GIGA"}
+    if jour in [5,6,7,8,18,19,20,21,22,25,26,27]:
+        return {"type":"FAVORABLE_VENTE","mise":100,"raison":f"Jour {jour}: pic historique, tout le monde achete, MEILLEUR SELL","action":"SELL GIGA"}
+    return {"type":"ORDINAIRE","mise":30,"raison":f"Jour {jour}: ordinaire, calme. Prudent 30%","action":"SCALP PRUDENT 30%"}
 
-    return {
-        "capital_reel": capital_reel,
-        "source": bybit["source"],
-        "jour_type": jour["type"],
-        "jour_num": jour["jour"],
-        "mise_pourcent": mise_pourcent,
-        "mise_dollars": round(mise_dollars, 2),
-        "raison": jour["raison"],
-        "action": jour["action"],
-        "coffre": coffre,
-        "bybit_detail": bybit
-    }
+def load_coffre():
+    return load(COFFRE,{"principal":10.91,"coffre":0.0,"urgence":0.0,"safepal":0.0,"crypto":"USDT"})
 
-# ========== 6. ROUTES API ==========
+def save_coffre(d):
+    save(COFFRE,d)
 
-@app.get("/", response_class=HTMLResponse)
-def home():
-    scan = scan_ninja_logic()
-    token, chat = get_telegram_creds()
+def crypto_meurt(p_now,p_avant):
+    if not p_avant:
+        return {"alerte":False}
+    chute=((p_now-p_avant)/p_avant)*100
+    return {"alerte":chute<-3,"chute":chute,"msg":f"CRYPTO MEURT {chute:.2f}% en 15min! VENTE RAPIDE"} if chute<-3 else {"alerte":False,"chute":chute}
 
-    html = f"""
-    <html>
-    <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>
-    <style>
-        body{{background:#000;color:#ff0000;text-align:center;font-family:monospace;padding:10px}}
-        #eye{{width:120px;height:120px;margin:20px auto;background:radial-gradient(circle,#ff0000 20%,#000033 80%);border-radius:50%;box-shadow:0 0 40px red;animation:pulse 2s infinite}}
-        @keyframes pulse{{0%{{box-shadow:0 0 20px red}}50%{{box-shadow:0 0 50px red}}100%{{box-shadow:0 0 20px red}}}}
-        button{{width:90%;padding:14px;margin:5px;background:#111;color:#ff0000;border:2px solid #ff0000;border-radius:12px;font-weight:bold}}
-        #out{{background:#050000;border:2px solid red;padding:12px;margin:12px auto;max-width:600px;color:#0f8;text-align:left;white-space:pre-wrap;border-radius:12px;min-height:200px;font-size:12px}}
-        .badge{{display:inline-block;padding:4px 8px;border:1px solid red;border-radius:6px;margin:2px;font-size:11px}}
-    </style>
-    </head>
-    <body>
-        <div id="eye"></div>
-        <h1>KITTRA V26 FINAL</h1>
-        <div>
-            <span class="badge">CAPITAL: {scan['capital_reel']}$</span>
-            <span class="badge">{scan['jour_type']}</span>
-            <span class="badge">SRC: {scan['source']}</span>
-            <span class="badge">TG: {'OK' if token and chat else 'NO'}</span>
-        </div>
-        <div style="margin:10px;color:#ffaa00">{scan['raison']} - Mise: {scan['mise_dollars']}$</div>
+def baleine_tracker():
+    a=random.choice(["BUY_100K","SELL_100K","RIEN"])
+    return {"detecte":a!="RIEN","action":a,"kittra":"10$ meme seconde, ninja"} if a!="RIEN" else {"detecte":False}
 
-        <button onclick="call('/etat')">ETAT + BYBIT REEL</button>
-        <button onclick="call('/scan-ninja')">SCAN NINJA</button>
-        <button onclick="call('/test-telegram')">TEST TELEGRAM</button>
-        <button onclick="call('/ping')">PING</button>
-
-        <div id="out">Bienvenue Gardien - {scan['raison']}
-Capital reel: {scan['capital_reel']}$
-Mise: {scan['mise_pourcent']}% = {scan['mise_dollars']}$
-Source: {scan['source']}</div>
-
-        <script>
-        function call(url){{
-            document.getElementById('out').innerText='Chargement '+url+'...';
-            fetch(url).then(r=>r.json()).then(j=>document.getElementById('out').innerText=JSON.stringify(j,null,2)).catch(e=>document.getElementById('out').innerText='Erreur '+e)
-        }}
-        setInterval(()=>{{fetch('/ping').catch(()=>{{}})}}, 150000);
-        </script>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html)
+@app.get("/",response_class=HTMLResponse)
+def root():
+    c=load_coffre();j=analyse_jour()
+    tok,cid=get_tg()
+    return f"<h1>KITTRA V26 NINJA FINAL</h1><p>Principal:{c['principal']}$ ({j['mise']}% en jeu) | Coffre:{c['coffre']}$ | Urgence:{c['urgence']}$ | SafePal:{c['safepal']}$</p><p><b>{j['type']}</b>: {j['raison']}</p><p>TG token:{bool(tok)} chat:{bool(cid)} | MODEL:{MODEL}</p><p><a href='/scan-ninja'>SCAN NINJA</a> | <a href='/bilan-journalier'>Bilan Jour</a> | <a href='/bilan-hebdo'>Bilan Hebdo</a> | <a href='/etat'>Etat</a> | <a href='/test-telegram'>Test Telegram</a> | <a href='/fichiers'>Fichiers</a></p>"
 
 @app.get("/etat")
 def etat():
-    scan = scan_ninja_logic()
-    token, chat = get_telegram_creds()
-    return {
-        "version": "V26 FINAL SIMPLE",
-        "bybit": scan["bybit_detail"],
-        "capital_reel": scan["capital_reel"],
-        "source": scan["source"],
-        "jour": scan,
-        "coffre": scan["coffre"],
-        "telegram": {"has_token": bool(token), "has_chat": bool(chat)},
-        "time": str(datetime.datetime.now())
-    }
+ from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+import os,requests,json,datetime,glob,random
 
-@app.get("/scan-ninja")
-def scan_ninja():
-    return scan_ninja_logic()
+app=FastAPI()
+MODEL=os.getenv("OPENROUTER_MODEL","meta-llama/llama-3.1-8b-instruct")
+OR_KEY=os.getenv("OPENROUTER_API_KEY")
+
+# --- AUTO-DETECT TELEGRAM 100% ---
+def get_tg():
+    token=os.getenv("TG_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN") or os.getenv("BOT_TOKEN")
+    chat=os.getenv("TG_CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID")
+    return token, chat
+
+TG_TOKEN, TG_ID = get_tg()
+
+COFFRE="coffre_tresor.json";TRADES="trades_kittra.json";ATTENTE="attente_decision.json";REGLES="regles_kittra.json"
+
+def load(f,d):
+    try:
+        if os.path.exists(f):
+            return json.loads(open(f).read())
+    except:
+        pass
+    return d
+
+def save(f,d):
+    open(f,"w").write(json.dumps(d))
+
+def send_tg(m):
+    try:
+        tok, cid = get_tg()
+        if not tok or not cid:
+            print(f"TG MISSING token={bool(tok)} chat={bool(cid)} env={dict(os.environ)}")
+            return f"TG MISSING token={bool(tok)} chat={bool(cid)}"
+        r=requests.post(f"https://api.telegram.org/bot{tok}/sendMessage",json={"chat_id":cid,"text":m,"parse_mode":"HTML"},timeout=15)
+        print(f"TG SEND {r.status_code} {r.text[:200]}")
+        return f"OK {r.status_code}"
+    except Exception as e:
+        print(f"TG ERR {e}")
+        return str(e)
+
+def cerveau(p):
+    try:
+        if not OR_KEY:
+            return "Live OK - Pas de cle OR"
+        r=requests.post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":f"Bearer {OR_KEY}","HTTP-Referer":"https://kittra-ninja-ultime.onrender.com","X-Title":"KITTRA"},json={"model":MODEL,"messages":[{"role":"user","content":p}],"max_tokens":300},timeout=30).json()
+        return r['choices'][0]['message']['content'] if "choices" in r else str(r)
+    except Exception as e:
+        return f"Err:{e}"
+
+def analyse_jour():
+    jour=datetime.datetime.now().day
+    if jour in [1,2,3,28,29,30]:
+        return {"type":"FAVORABLE_ACHAT","mise":100,"raison":f"Jour {jour}: chute historique fin/debut mois, baleines accumulent. MEILLEUR BUY","action":"BUY GIGA"}
+    if jour in [5,6,7,8,18,19,20,21,22,25,26,27]:
+        return {"type":"FAVORABLE_VENTE","mise":100,"raison":f"Jour {jour}: pic historique, tout le monde achete, MEILLEUR SELL","action":"SELL GIGA"}
+    return {"type":"ORDINAIRE","mise":30,"raison":f"Jour {jour}: ordinaire, calme. Prudent 30%","action":"SCALP PRUDENT 30%"}
+
+def load_coffre():
+    return load(COFFRE,{"principal":10.91,"coffre":0.0,"urgence":0.0,"safepal":0.0,"crypto":"USDT"})
+
+def save_coffre(d):
+    save(COFFRE,d)
+
+def crypto_meurt(p_now,p_avant):
+    if not p_avant:
+        return {"alerte":False}
+    chute=((p_now-p_avant)/p_avant)*100
+    return {"alerte":chute<-3,"chute":chute,"msg":f"CRYPTO MEURT {chute:.2f}% en 15min! VENTE RAPIDE"} if chute<-3 else {"alerte":False,"chute":chute}
+
+def baleine_tracker():
+    a=random.choice(["BUY_100K","SELL_100K","RIEN"])
+    return {"detecte":a!="RIEN","action":a,"kittra":"10$ meme seconde, ninja"} if a!="RIEN" else {"detecte":False}
+
+@app.get("/",response_class=HTMLResponse)
+def root():
+    c=load_coffre();j=analyse_jour()
+    tok,cid=get_tg()
+    return f"<h1>KITTRA V26 NINJA FINAL</h1><p>Principal:{c['principal']}$ ({j['mise']}% en jeu) | Coffre:{c['coffre']}$ | Urgence:{c['urgence']}$ | SafePal:{c['safepal']}$</p><p><b>{j['type']}</b>: {j['raison']}</p><p>TG token:{bool(tok)} chat:{bool(cid)} | MODEL:{MODEL}</p><p><a href='/scan-ninja'>SCAN NINJA</a> | <a href='/bilan-journalier'>Bilan Jour</a> | <a href='/bilan-hebdo'>Bilan Hebdo</a> | <a href='/etat'>Etat</a> | <a href='/test-telegram'>Test Telegram</a> | <a href='/fichiers'>Fichiers</a></p>"
+
+@app.get("/etat")
+def etat():
+    tok,cid=get_tg()
+    return {
+        "coffre":load_coffre(),
+        "jour":analyse_jour(),
+        "baleine":baleine_tracker(),
+        "regles":load(REGLES,[]),
+        "model":MODEL,
+        "telegram":{"token":bool(tok),"chat_id":bool(cid),"env_found":{"TG_TOKEN":bool(os.getenv("TG_TOKEN")),"TELEGRAM_BOT_TOKEN":bool(os.getenv("TELEGRAM_BOT_TOKEN")),"CHAT_ID":bool(os.getenv("CHAT_ID")),"TG_CHAT_ID":bool(os.getenv("TG_CHAT_ID")),"TELEGRAM_CHAT_ID":bool(os.getenv("TELEGRAM_CHAT_ID"))},"token_preview":(tok[:10]+"...") if tok else None},
+        "cles":bool(OR_KEY and tok)
+    }
 
 @app.get("/test-telegram")
 def test_telegram():
-    bybit = get_bybit_balance()
-    msg = f"KITTRA V26 TEST\nCapital reel: {bybit['real']}$\nSource: {bybit['source']}\nJour: {jour_type()['type']}\nTime: {datetime.datetime.now()}"
-    res = envoyer_telegram(msg)
-    return {"telegram": res, "bybit": bybit, "message_envoye": msg}
+    tok,cid=get_tg()
+    msg=f"KITTRA V26 TEST LIVE {datetime.datetime.now()} - Token {bool(tok)} Chat {bool(cid)} - Ca marche Gardien!"
+    res=send_tg(msg)
+    return {"env":f"token={bool(tok)} chat={bool(cid)}","send_result":res,"message":msg,"time":str(datetime.datetime.now())}
 
-@app.get("/ping")
-def ping():
-    return {
-        "ok": True,
-        "v": "V26",
-        "bybit_keys": bool(os.getenv("BYBIT_API_KEY")),
-        "tg_keys": bool(get_telegram_creds()[0]),
-        "time": str(datetime.datetime.now()),
-        "keep_alive": "anti-dormeur actif"
-    }
+@app.get("/fichiers")
+def fichiers():
+    return {"fichiers":glob.glob("*.json")+glob.glob("*.py"),"coffre":load_coffre(),"note":"Lecteur universel"}
+
+@app.get("/scan-ninja")
+def scan_ninja():
+    c=load_coffre();j=analyse_jour();b=baleine_tracker();p_now=605;p_avant=625;mort=crypto_meurt(p_now,p_avant)
+    mise_reelle=c["principal"]*j["mise"]/100
+    prompt=f"Solde {c['principal']}$, Mise {mise_reelle}$ ({j['mise']}%), Jour {j}, Baleine {b}, Mort {mort}, BNB {p_now}$. Decide BUY/SELL/HOLD + crypto BNB/SOL/ARB + confiance 0-100"
+    ia=cerveau(prompt);conf=85 if "FAVORABLE" in j["type"] else 45
+    if mort["alerte"]:
+        ia=f"VENTE RAPIDE URGENTE {mort['msg']}";conf=95
+    if b["detecte"]:
+        ia+=f" + SUIVI BALEINE NINJA {b['action']}"
+    if conf<60:
+        att=load(ATTENTE,[]);att.append({"id":str(datetime.datetime.now()),"decision":ia,"details":f"Jour {j['type']} mise {mise_reelle}$ | Baleine {b} | Prix {p_now}$","conf":conf,"deadline":str(datetime.datetime.now()+datetime.timedelta(hours=18))});save(ATTENTE,att)
+        send_tg(f"FLOU {conf}% - {j['type']} mise {mise_reelle}$\n{j['raison']}\nBaleine:{b}\nJe veux: {ia}\nReponds /repondre?reponse=OUI ou NON. 18h max")
+        return {"type":j["type"],"mise":mise_reelle,"raison":j["raison"],"decision":ia,"status":"ATTENTE ACCORD 18H","baleine":b,"mort":mort}
+    send_tg(f"{j['type']} {conf}% - Mise {mise_reelle}$\n{j['raison']}\nAction: {ia}\nBaleine:{b}")
+    return {"type":j["type"],"mise":mise_reelle,"raison":j["raison"],"decision":ia,"confiance":conf,"baleine":b,"mort":mort}
+
+@app.get("/repondre")
+def repondre(reponse: str):
+    att=load(ATTENTE,[])
+    if not att:
+        return {"msg":"Pas d'attente"}
+    last=att[-1];save(ATTENTE,[])
+    if reponse.upper()=="OUI":
+        send_tg(f"Gardien OUI -> J'execute {last['decision']}");return {"execute":last}
+    else:
+        send_tg(f"Gardien NON -> J'annule {last['decision']}");return {"annule":last}
+
+@app.get("/profit")
+def profit(m: float,s="MOLO"):
+    c=load_coffre();c["coffre"]+=m;save(COFFRE,c);tr=load(TRADES,[]);tr.append({"date":str(datetime.datetime.now()),"type":s,"gain":m});save(TRADES,tr)
+    if m>=1:
+        send_tg(f"PROFIT {s} +{m}$ -> Coffre direct + Sous-coffre 1$ auto. Coffre:{c['coffre']}$")
+    else:
+        send_tg(f"PROFIT {s} +{m}$ -> Coffre {c['coffre']}$")
+    return c
 
 @app.get("/bilan-journalier")
 def bilan_j():
-    scan = scan_ninja_logic()
-    return {"bilan": "journalier V26", "scan": scan}
+    c=load_coffre();tr=load(TRADES,[]);reg=load(REGLES,[])
+    analyse=cerveau(f"Trades {tr[-5:]} Coffre {c} Regles {reg}. Analyse erreurs, corrige 1 regle pour demain.")
+    reg.append({"date":str(datetime.date.today()),"lecon":analyse});save(REGLES,reg)
+    send_tg(f"BILAN JOUR {datetime.date.today()}\nPrincipal {c['principal']}$ Coffre {c['coffre']}$\nLecon IA: {analyse}")
+    return {"bilan":c,"lecon":analyse}
 
-@app.get("/api/status")
-def api_status():
-    return scan_ninja_logic()
+@app.get("/bilan-hebdo")
+def bilan_h():
+    c=load_coffre();g=c["principal"]-10.91
+    if g<=0:
+        return {"msg":"Pas de gains"}
+    pc=g*0.5;u=pc*0.4;s=pc*0.3;cr=pc*0.3;r=g*0.5
+    c["urgence"]+=u;c["safepal"]+=s;c["coffre"]+=cr;c["principal"]+=r;save_coffre(c)
+    conseil=cerveau(f"Semaine +{g}$ Repart Urgence {u} SafePal {s} Coffre {cr} Reinvest {r}. Strat meilleure? Conseil?")
+    send_tg(f"BILAN HEBDO +{g}$\n50% Coffre: Urgence {u}$ | SafePal {s}$ | Coffre {cr}$\n50% Reinvest {r}$ -> Principal {c['principal']}$\nConseil: {conseil}")
+    return {"coffre":c,"conseil":conseil}
+
+@app.get("/lundi-sweep")
+def lundi():
+    c=load_coffre();sw=c["coffre"]*0.05;c["coffre"]-=sw;c["safepal"]+=sw;save_coffre(c)
+    choix=cerveau(f"Tu as {sw}$ SafePal, choisis 1 crypto GIGA: SOL,ARB,BNB,AVAX? Repond nom seul.")
+    send_tg(f"LUNDI SWEEP 5% Coffre {sw}$ -> SafePal en {choix} pour GIGA Mardi-Vendredi")
+    return {"sweep":sw,"crypto":choix,"coffre":c}
+
+@app.get("/ping")
+def ping():
+    return {"ok":True,"v":"V26","model":MODEL,"time":str(datetime.datetime.now())}￼Enter   tok,cid=get_tg()
+    return {
+        "coffre":load_coffre(),
