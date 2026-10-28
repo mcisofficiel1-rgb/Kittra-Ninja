@@ -1,16 +1,74 @@
-from fastapi import FastAPI;from fastapi.responses import HTMLResponse;import os,requests,json,datetime,random
-app=FastAPI();M=os.getenv("OPENROUTER_MODEL","meta-llama/muse-spark-1.3");K=os.getenv("OPENROUTER_API_KEY");T=os.getenv("TG_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN");I=os.getenv("TG_CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID")
-C="coffre_tresor.json";L=lambda f,d: json.loads(open(f).read()) if os.path.exists(f) else d;W=lambda f,d: open(f,"w").write(json.dumps(d))
-G=lambda m: requests.post(f"https://api.telegram.org/bot{T}/sendMessage",json={"chat_id":I,"text":m},timeout=10).text if T and I else f"MISS T:{bool(T)} I:{bool(I)}"
-B=lambda p: requests.post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":f"Bearer {K}"},json={"model":M,"messages":[{"role":"user","content":p}]},timeout=20).json().get('choices',[{}])[0].get('message',{}).get('content','NO KEY') if K else "NO KEY"
-J=lambda: (lambda d: {"type":"FAVORABLE_ACHAT","mise":100} if d in [1,2,3,28,29,30] else {"type":"FAVORABLE_VENTE","mise":100} if d in [5,6,7,8,18,19,20,21,22,25,26,27] else {"type":"ORDINAIRE","mise":30})(datetime.datetime.now().day)
-@app.get("/",response_class=HTMLResponse)
-def r():j=J();return f"<h1>KITTRA V26 17L</h1><p>TG:{bool(T)} {bool(I)} | {j['type']} {j['mise']}%</p><a href='/etat'>/etat</a> | <a href='/test-telegram'>/test-telegram</a> | <a href='/scan-ninja'>/scan-ninja</a>"
+import os, json, time, hmac, hashlib, datetime, requests
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+
+app = FastAPI()
+COFFRE_FILE = "coffre_tresor.json"
+
+def load_coffre():
+    if os.path.exists(COFFRE_FILE):
+        return json.loads(open(COFFRE_FILE).read())
+    return {"principal": 10.91, "coffre": 0.0}
+
+def get_bybit_balance():
+    key = os.getenv("BYBIT_API_KEY")
+    secret = os.getenv("BYBIT_API_SECRET")
+    if not key or not secret:
+        return {"real": load_coffre()["principal"], "source": "JSON_FALLBACK", "error": "NO BYBIT KEYS"}
+    try:
+        ts = str(int(time.time()*1000))
+        param = "accountType=UNIFIED"
+        payload = ts + key + "5000" + param
+        sign = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        headers = {"X-BAPI-API-KEY": key, "X-BAPI-SIGN": sign, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000"}
+        r = requests.get(f"https://api.bybit.com/v5/account/wallet-balance?{param}", headers=headers, timeout=10).json()
+        bal = float(r['result']['list'][0]['totalEquity'])
+        return {"real": bal, "source": "BYBIT", "totalEquity": bal}
+    except Exception as e:
+        return {"real": load_coffre()["principal"], "source": "FALLBACK", "error": str(e)[:100]}
+
+def jour_type():
+    d = datetime.datetime.now().day
+    if d in [1,2,3,28,29,30]: return {"type": "FAVORABLE_ACHAT", "mise": 100, "raison": f"Jour {d} - BUY GIGA"}
+    if d in [5,6,7,8,18,19,20,21,22,25,26,27]: return {"type": "FAVORABLE_VENTE", "mise": 100, "raison": f"Jour {d} - SELL GIGA"}
+    return {"type": "ORDINAIRE", "mise": 30, "raison": f"Jour {d} - SCALP PRUDENT"}
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    j = jour_type()
+    b = get_bybit_balance()
+    c = load_coffre()
+    tg_ok = bool(os.getenv("TG_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN"))
+    return f"""
+<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width'>
+<style>body{{background:#000;color:#f00;text-align:center;font-family:monospace}}#eye{{width:140px;height:140px;margin:20px auto;background:radial-gradient(circle,#f00 20%,#000033 80%);border-radius:50%;box-shadow:0 0 40px red;}}button{{width:92%;padding:14px;margin:4px;background:#111;color:#f00;border:2px solid #f00;border-radius:10px}}#out{{background:#050000;border:2px solid red;padding:10px;margin:10px;color:#0f8;text-align:left;white-space:pre-wrap;min-height:200px;border-radius:10px}}</style>
+</head><body><div id=eye></div><h1>KITTRA V26 BYBIT</h1>
+<div>REEL: {b['real']}$ | JSON: {c['principal']}$ | {j['type']} | TG:{'OK' if tg_ok else 'NO'} | BYBIT:{b['source']}</div>
+<button onclick="fetch('/etat').then(r=>r.json()).then(j=>out.innerText=JSON.stringify(j,null,2))">ETAT + BYBIT</button>
+<button onclick="fetch('/scan-ninja').then(r=>r.json()).then(j=>out.innerText=JSON.stringify(j,null,2))">SCAN</button>
+<button onclick="fetch('/test-telegram').then(r=>r.json()).then(j=>out.innerText=JSON.stringify(j,null,2))">TEST TG</button>
+<div id=out>{j['raison']}<br>Capital: {b}</div></body></html>
+"""
+
 @app.get("/etat")
-def e():return {"coffre":L(C,{"principal":10.91}),"jour":J(),"tg":{"token":bool(T),"chat_id":bool(I),"env":{"TG_TOKEN":bool(os.getenv("TG_TOKEN")),"TELEGRAM_BOT_TOKEN":bool(os.getenv("TELEGRAM_BOT_TOKEN")),"CHAT_ID":bool(os.getenv("CHAT_ID"))}},"cles":bool(K and T)}
-@app.get("/test-telegram")
-def t():return {"result":G(f"🧪 KITTRA V26 17L TEST {datetime.datetime.now()} - TG OK Gardien!"),"token":bool(T),"id":bool(I)}
+def etat():
+    return {{"bybit": get_bybit_balance(), "coffre": load_coffre(), "jour": jour_type(), "tg": bool(os.getenv("TG_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN"))}}
+
 @app.get("/scan-ninja")
-def s():j=J();c=L(C,{"principal":10.91});m=c["principal"]*j["mise"]/100;i=B(f"{j} mise {m}$ BUY/SELL/HOLD?") if K else j["type"];G(f"✅ {j['type']} {m}$ -> {i}");return {"type":j["type"],"mise":m,"ia":i,"tg_sent":bool(T and I)}
+def scan():
+    j = jour_type()
+    b = get_bybit_balance()
+    mise = b['real'] * j['mise'] / 100
+    return {{"capital_reel": b['real'], "source": b['source'], "type": j['type'], "mise": mise, "raison": j['raison']}}
+
+@app.get("/test-telegram")
+def test_tg():
+    token = os.getenv("TG_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
+    chat = os.getenv("TG_CHAT_ID") or os.getenv("CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not chat: return {{"error": "NO TG KEYS", "token": bool(token), "chat": bool(chat)}}
+    b = get_bybit_balance()
+    r = requests.post(f"https://api.telegram.org/bot{{token}}/sendMessage", json={{"chat_id": chat, "text": f"🧪 KITTRA V26 TEST Capital reel {{b['real']}}$ Source {{b['source']}}"}}, timeout=10).json()
+    return {{"telegram": r, "bybit": b}}
+
 @app.get("/ping")
-def p():return {"ok":True,"tg":bool(T and I)}￼Enter
+def ping(): return {{"ok": True, "bybit_keys": bool(os.getenv("BYBIT_API_KEY")), "time": str(datetime.datetime.now())}}￼Enter
