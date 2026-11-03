@@ -1,8 +1,17 @@
 {
-  "EPARGNE_INITIAL": 0.0,
-  "EPARGNE_CAPITAL_LIVE": 0.0,
+  "EPARGNE_INITIAL": null,
+  "EPARGNE_CAPITAL_LIVE": null,
   "EPARGNE_LAST_SCAN": null,
   "EPARGNE_SOURCE": "bybit_sub_KITTRAEPARGNE",
+  "EPARGNE_SUBACCOUNT_NAME": "KITTRAEPARGNE",
+  "EPARGNE_BYBIT_RULES": {
+    "min_length": 5,
+    "max_length": 20,
+    "special_chars_allowed": false,
+    "valid_name": "KITTRAEPARGNE"
+  },
+  "EPARGNE_AUTO_READ": true,
+  "EPARGNE_READ_MODE": "BYBIT_API_LIVE",
   "EPARGNE_CRYPTOS_START": ["BNB", "SOL", "DOGE"],
   "EPARGNE_CRYPTOS_LIVE": {},
   "EPARGNE_BONUS_USDT": 0.0,
