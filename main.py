@@ -10,6 +10,10 @@ MAX_TRADE = 2.0
 MAX_TRADE_BYBIT = 5.0
 SAFEPAL_ADDRESS = os.getenv("SAFEPAL_ADDRESS", "")
 
+# VRAIS SOLDES VERIFIES SUR TES IMAGES BYBIT
+VRAI_PRINCIPAL = 9.30
+VRAI_EPARGNE = 7.991064
+
 def get_tg():
     t = os.getenv("TG_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
     c = os.getenv("TG_CHAT_ID") or os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID")
@@ -30,7 +34,7 @@ def load_coffre():
         if os.path.exists(COFFRE_FILE):
             return json.loads(open(COFFRE_FILE).read())
     except: pass
-    return {"principal": 10.91, "coffre": 0.0, "urgence": 0.0, "safepal": 0.0, "total_gains": 0.0, "last_bilan": "", "epargne_capital": 7.9872}
+    return {"principal": VRAI_PRINCIPAL, "coffre": 0.0, "urgence": 0.0, "safepal": 0.0, "total_gains": 0.0, "last_bilan": "", "epargne_capital": VRAI_EPARGNE}
 
 def save_coffre(d):
     open(COFFRE_FILE, "w").write(json.dumps(d))
@@ -41,37 +45,84 @@ def bybit_sign(params):
     sig = hmac.new(s.encode(), (ts+k+"5000"+params).encode(), hashlib.sha256).hexdigest()
     return {"X-BAPI-API-KEY": k, "X-BAPI-SIGN": sig, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000"}
 
+# --- CORRECTION 1 : PRINCIPAL SOMME UNIFIED + SPOT + FUND ---
 def get_balance_principal():
-    try:
-        p = "accountType=UNIFIED"
-        r = requests.get("https://api.bybit.com/v5/account/wallet-balance?"+p, headers=bybit_sign(p), timeout=10).json()
-        return float(r["result"]["list"][0]["totalEquity"])
-    except: return 10.91
+    total = 0.0
+    vu = set()
+    for account in ["UNIFIED", "SPOT", "FUND"]:
+        try:
+            p = f"accountType={account}"
+            r = requests.get("https://api.bybit.com/v5/account/wallet-balance?"+p, headers=bybit_sign(p), timeout=10).json()
+            lst = r.get("result", {}).get("list", [])
+            if not lst: continue
+            for coin in lst[0].get("coin", []):
+                name = coin.get("coin", "")
+                usd = float(coin.get("usdValue", 0) or 0)
+                # Evite de compter 2 fois la meme piece si Bybit la renvoie dans 2 comptes
+                key = f"{name}_{usd}"
+                if key in vu: continue
+                vu.add(key)
+                total += usd
+        except Exception as e:
+            print(f"BAL PRINCIPAL {account} ERR {e}")
+    if total > 0:
+        return round(total, 4)
+    return VRAI_PRINCIPAL
 
+# --- CORRECTION 2 : TROUVE LE SOUS-COMPTE MEME SANS LE R ---
 def get_sub_uid():
     try:
         r = requests.get("https://api.bybit.com/v5/asset/transfer/query-sub-member-list", headers=bybit_sign(""), timeout=10).json()
         lst = r.get("result", {}).get("subMemberList", [])
+        print(f"DEBUG SOUS-COMPTES = {lst}")
+        if not lst:
+            return None
         for sub in lst:
-            if sub.get("subMemberName") == "KITTRAEPARGNE": return sub.get("uid")
-        if lst: return lst[0].get("uid")
-    except Exception as e: print(f"UID ERR {e}")
-    return None
+            name = str(sub.get("subMemberName", "")).upper()
+            nick = str(sub.get("nickname", "")).upper()
+            user = str(sub.get("username", "")).upper()
+            # Ton vrai nom est KITTRAEPAGNE sans R, on accepte avec ou sans R
+            if "KITTRA" in name or "KITTRA" in nick or "KITTRA" in user or "EPAGNE" in name or "EPAGNE" in nick or "EPARGNE" in name or "EPARGNE" in nick:
+                print(f"DEBUG UID TROUVE = {sub.get('uid')} pour {name} / {nick}")
+                return sub.get("uid")
+        # Si un seul sous-compte, on le prend direct
+        if len(lst) == 1:
+            return lst[0].get("uid")
+        return lst[0].get("uid")
+    except Exception as e:
+        print(f"UID ERR {e}")
+        return None
 
 def get_balance_epargne():
     uid = get_sub_uid()
+    print(f"DEBUG UID EPARGNE = {uid}")
     if not uid:
         try:
             if os.path.exists(EPARGNE_FILE):
                 d = json.loads(open(EPARGNE_FILE).read())
-                return float(d.get("EPARGNE_CAPITAL_LIVE", 7.9872))
+                return float(d.get("EPARGNE_CAPITAL_LIVE", VRAI_EPARGNE))
         except: pass
-        return 7.9872
-    try:
-        p = f"accountType=UNIFIED&memberId={uid}"
-        r = requests.get("https://api.bybit.com/v5/account/wallet-balance?"+p, headers=bybit_sign(p), timeout=10).json()
-        return float(r["result"]["list"][0]["totalEquity"])
-    except: return 7.9872
+        return VRAI_EPARGNE
+    total = 0.0
+    vu = set()
+    for account in ["UNIFIED", "SPOT", "FUND"]:
+        try:
+            p = f"accountType={account}&memberId={uid}"
+            r = requests.get("https://api.bybit.com/v5/account/wallet-balance?"+p, headers=bybit_sign(p), timeout=10).json()
+            lst = r.get("result", {}).get("list", [])
+            if not lst: continue
+            for coin in lst[0].get("coin", []):
+                name = coin.get("coin", "")
+                usd = float(coin.get("usdValue", 0) or 0)
+                key = f"{name}_{usd}"
+                if key in vu: continue
+                vu.add(key)
+                total += usd
+        except Exception as e:
+            print(f"BAL EPARGNE {account} ERR {e}")
+    if total > 0:
+        return round(total, 4)
+    return VRAI_EPARGNE
 
 def get_pair_info(symbol):
     try:
@@ -163,7 +214,6 @@ def transfert_safepal(montant):
         return r
     except Exception as e: return {"ok": False, "raison": str(e)}
 
-# --- MEMOIRE VENTE PRINCIPAL ---
 VENTE_PRINCIPAL_MEMO = {}
 PRINCIPAL_LADDER = [{"profit": 0.5, "pct": 30}, {"profit": 1.5, "pct": 20}, {"profit": 2.5, "pct": 15}, {"profit": 3.0, "pct": 10}]
 EPARGNE_BUY_LADDER = [{"chute": -5, "montant": 0.5}, {"chute": -8, "montant": 1.0}, {"chute": -12, "montant": 1.5}]
@@ -172,13 +222,12 @@ EPARGNE_SELL_LADDER = [{"profit": 4, "pct": 25}, {"profit": 10, "pct": 25}, {"pr
 @app.on_event("startup")
 def on_start():
     cap = get_balance_principal(); ep = get_balance_epargne()
-    send_tg(f"🔥 KITTRA V34 FINAL DEMARRE !\nPrincipal ULTIME: {cap}$ Liste: {liste_auto_principal(cap)}\nEpargne: {ep}$ Liste: {liste_auto_epargne(ep)}\nSysteme: C avant B + Passage autonome + MOLO Principal + Dip Epargne + Bilan Hebdo + SafePal")
+    send_tg(f"🔥 KITTRA V35 FINAL DEMARRE !\nPrincipal ULTIME: {cap}$ Liste: {liste_auto_principal(cap)}\nEpargne KITTRAEPAGNE: {ep}$ Liste: {liste_auto_epargne(ep)}\nSysteme: C avant B + Passage autonome + MOLO Principal + Dip Epargne + Bilan Hebdo + SafePal")
 
 @app.get("/")
 def home():
-    return {"v": "V34 FINAL", "principal": get_balance_principal(), "epargne": get_balance_epargne(), "liste_principal": liste_auto_principal(get_balance_principal()), "liste_epargne": liste_auto_epargne(get_balance_epargne()), "coffre": load_coffre()}
+    return {"v": "V35 FINAL CORRIGE", "principal": get_balance_principal(), "epargne": get_balance_epargne(), "total_2_comptes": round(get_balance_principal() + get_balance_epargne(), 4), "liste_principal": liste_auto_principal(get_balance_principal()), "liste_epargne": liste_auto_epargne(get_balance_epargne()), "coffre": load_coffre()}
 
-# --- ACHAT PRINCIPAL ---
 @app.get("/scan-vrai")
 def scan_vrai():
     bal_p = get_balance_principal()
@@ -199,7 +248,6 @@ def scan_vrai():
             continue
     return {"balance_principal": bal_p, "liste": candidats, "resultats": out}
 
-# --- ACHAT EPARGNE : ACHETE LA BAISSE -5 / -8 / -12 ---
 @app.get("/scan-epargne-vrai")
 def scan_epargne_vrai():
     bal = get_balance_epargne()
@@ -229,7 +277,6 @@ def scan_epargne_vrai():
             continue
     return {"balance_epargne": bal, "liste": candidats, "resultats": out}
 
-# --- VENTE PRINCIPAL MOLO : BASE SUR PRIX D'ACHAT ---
 @app.get("/vente-principal")
 def vente_principal_route(symbol: str = "GIGAUSDT", qty: float = 10, prix_achat: float = 0.01):
     prix_actuel = get_price(symbol)
@@ -256,7 +303,6 @@ def vente_principal_route(symbol: str = "GIGAUSDT", qty: float = 10, prix_achat:
         return {"vente": palier, "qty": qty_sell, "profit": profit_pct}
     return {"refuse": order}
 
-# --- VENTE EPARGNE : VEND LA MONTEE +4 / +10 / +26 ---
 @app.get("/vente-epargne")
 def vente_epargne_route(symbol: str = "BNBUSDT", qty: float = 0.01, profit_pct: float = 5.0):
     if profit_pct >= 26: pct = 50
@@ -303,4 +349,5 @@ def profit(m: float, s: str = "TRADE"):
 
 @app.get("/ping")
 def ping():
-    return {"ok": True, "v": "V34", "uid": bool(get_sub_uid()), "safepal_config": bool(SAFEPAL_ADDRESS)}
+    uid = get_sub_uid()
+    return {"ok": True, "v": "V35", "uid_trouve": bool(uid), "uid": uid, "principal_reel": get_balance_principal(), "epargne_reel": get_balance_epargne(), "safepal_config": bool(SAFEPAL_ADDRESS)}
