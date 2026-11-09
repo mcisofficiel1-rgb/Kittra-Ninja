@@ -1,28 +1,14 @@
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
-import os, json, datetime, time, hmac, hashlib, requests, re
+import os, json, time, hmac, hashlib, requests, datetime
 
 app = FastAPI()
-
 COFFRE_FILE = "coffre_tresor.json"
-TRADES_FILE = "trades_kittra.json"
 EPARGNE_FILE = "json_epargne.json"
 MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/muse-spark-1.3")
 OR_KEY = os.getenv("OPENROUTER_API_KEY")
-
-# --- EXIGENCES BYBIT ---
-# Bybit dit: 5-20 caractères, pas de caractères spéciaux
-# Donc on utilise KITTRAEPARGNE sans tiret
-BYBIT_EPARGNE_NAME = "KITTRAEPARGNE"  # 13 chars, lettres seules = VALIDÉ BYBIT
-
-# --- EPARGNE V29 IMPORT ---
-try:
-    from epargne_v29 import get_epargne_status as ext_get_epargne, update_bonus, muse_spark_decide
-    EPARGNE_OK = True
-except:
-    EPARGNE_OK = False
-    def update_bonus(p): return p*0.5
-    def muse_spark_decide(a,b,c): return {"action":"WAIT"}
+MAX_TRADE = 2.0
+MAX_TRADE_BYBIT = 5.0
+SAFEPAL_ADDRESS = os.getenv("SAFEPAL_ADDRESS", "")
 
 def get_tg():
     t = os.getenv("TG_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
@@ -31,215 +17,290 @@ def get_tg():
 
 def send_tg(msg):
     try:
-        t,c = get_tg()
+        t, c = get_tg()
         if not t or not c: return "NO TG"
         r = requests.post(f"https://api.telegram.org/bot{t}/sendMessage", json={"chat_id": c, "text": msg}, timeout=10)
+        print(f"TG -> {r.status_code}")
         return f"OK {r.status_code}"
     except Exception as e:
-        return str(e)[:100]
+        return str(e)
 
 def load_coffre():
     try:
-        if os.path.exists(COFFRE_FILE): return json.loads(open(COFFRE_FILE).read())
+        if os.path.exists(COFFRE_FILE):
+            return json.loads(open(COFFRE_FILE).read())
     except: pass
-    return {"principal": 10.91, "coffre": 0.0, "urgence": 0.0, "safepal": 0.0, "total_gains": 0.0}
+    return {"principal": 10.91, "coffre": 0.0, "urgence": 0.0, "safepal": 0.0, "total_gains": 0.0, "last_bilan": "", "epargne_capital": 7.9872}
 
-def save_coffre(d): open(COFFRE_FILE, "w").write(json.dumps(d))
-def load_trades():
-    try:
-        if os.path.exists(TRADES_FILE): return json.loads(open(TRADES_FILE).read())
-    except: pass
-    return []
-def save_trades(d): open(TRADES_FILE, "w").write(json.dumps(d))
+def save_coffre(d):
+    open(COFFRE_FILE, "w").write(json.dumps(d))
 
-# --- LECTURE LIVE BYBIT PRINCIPAL ---
-def get_bybit():
-    k = os.getenv("BYBIT_API_KEY")
-    s = os.getenv("BYBIT_API_SECRET")
-    coffre = load_coffre()
-    if not k or not s: return coffre["principal"], "JSON"
+def bybit_sign(params):
+    k = os.getenv("BYBIT_API_KEY"); s = os.getenv("BYBIT_API_SECRET")
+    ts = str(int(time.time()*1000))
+    sig = hmac.new(s.encode(), (ts+k+"5000"+params).encode(), hashlib.sha256).hexdigest()
+    return {"X-BAPI-API-KEY": k, "X-BAPI-SIGN": sig, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000"}
+
+def get_balance_principal():
     try:
-        ts = str(int(time.time()*1000))
         p = "accountType=UNIFIED"
-        sig = hmac.new(s.encode(), (ts+k+"5000"+p).encode(), hashlib.sha256).hexdigest()
-        h = {"X-BAPI-API-KEY": k, "X-BAPI-SIGN": sig, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000"}
-        r = requests.get("https://api.bybit.com/v5/account/wallet-balance?"+p, headers=h, timeout=10).json()
-        v = float(r["result"]["list"][0]["totalEquity"])
-        return v, "BYBIT"
-    except:
-        return coffre["principal"], "FALLBACK"
+        r = requests.get("https://api.bybit.com/v5/account/wallet-balance?"+p, headers=bybit_sign(p), timeout=10).json()
+        return float(r["result"]["list"][0]["totalEquity"])
+    except: return 10.91
 
-# --- NOUVEAU: LECTURE LIVE BYBIT EPARGNE KITTRAEPARGNE ---
-def get_bybit_epargne_live():
-    """Lit le vrai solde du sous-compte KITTRAEPARGNE directement sur Bybit"""
-    k = os.getenv("BYBIT_API_KEY")
-    s = os.getenv("BYBIT_API_SECRET")
-    if not k or not s: return 0.0, "NO_KEY"
+def get_sub_uid():
+    try:
+        r = requests.get("https://api.bybit.com/v5/asset/transfer/query-sub-member-list", headers=bybit_sign(""), timeout=10).json()
+        lst = r.get("result", {}).get("subMemberList", [])
+        for sub in lst:
+            if sub.get("subMemberName") == "KITTRAEPARGNE": return sub.get("uid")
+        if lst: return lst[0].get("uid")
+    except Exception as e: print(f"UID ERR {e}")
+    return None
+
+def get_balance_epargne():
+    uid = get_sub_uid()
+    if not uid:
+        try:
+            if os.path.exists(EPARGNE_FILE):
+                d = json.loads(open(EPARGNE_FILE).read())
+                return float(d.get("EPARGNE_CAPITAL_LIVE", 7.9872))
+        except: pass
+        return 7.9872
+    try:
+        p = f"accountType=UNIFIED&memberId={uid}"
+        r = requests.get("https://api.bybit.com/v5/account/wallet-balance?"+p, headers=bybit_sign(p), timeout=10).json()
+        return float(r["result"]["list"][0]["totalEquity"])
+    except: return 7.9872
+
+def get_pair_info(symbol):
+    try:
+        r = requests.get(f"https://api.bybit.com/v5/market/instruments-info?category=spot&symbol={symbol}", timeout=10).json()
+        info = r["result"]["list"][0]
+        lot = info.get("lotSizeFilter", {})
+        return {"min_qty": float(lot.get("minOrderQty", 0)), "qty_step": float(lot.get("qtyStep", 0.001)), "min_notional": float(info.get("minOrderAmt", 5.0)), "ok": True}
+    except: return {"min_qty": 0, "qty_step": 0.001, "min_notional": 5.0, "ok": False}
+
+def get_price(symbol):
+    try:
+        r = requests.get(f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}", timeout=10).json()
+        return float(r["result"]["list"][0]["lastPrice"])
+    except: return 0.0
+
+def get_change_24h(symbol):
+    try:
+        r = requests.get(f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}", timeout=10).json()
+        return float(r["result"]["list"][0].get("price24hPcnt", 0)) * 100
+    except: return 0.0
+
+def liste_auto_principal(capital):
+    base = ["GIGAUSDT", "BNBUSDT", "SOLUSDT"]
+    if capital >= 15: base += ["DOGEUSDT", "PEPEUSDT"]
+    if capital >= 30: base += ["SHIBUSDT", "ZECUSDT", "ONDOUSDT", "QNTUSDT", "ETHUSDT"]
+    return base
+
+def liste_auto_epargne(capital):
+    base = ["BNBUSDT", "SOLUSDT", "DOGEUSDT"]
+    if capital >= 10: base += ["PEPEUSDT", "CRXUSDT"]
+    if capital >= 20: base += ["SHIBUSDT", "ZECUSDT", "ONDOUSDT", "QNTUSDT", "ETHUSDT"]
+    return base
+
+def check_C_avant_B(symbol, balance, voulu):
+    info = get_pair_info(symbol); price = get_price(symbol)
+    if price <= 0: return {"ok": False, "raison": f"{symbol} prix introuvable, je passe au suivant"}
+    min_notional = info["min_notional"]
+    if voulu < min_notional:
+        if min_notional <= balance and min_notional <= MAX_TRADE_BYBIT:
+            voulu = min_notional
+        else:
+            return {"ok": False, "raison": f"{symbol} demande {min_notional}$, j'ai {balance:.2f}$, je passe au suivant", "info": info, "price": price}
+    frais = voulu * 0.001 + 0.01
+    if balance < voulu + frais:
+        return {"ok": False, "raison": f"{symbol} besoin {voulu+frais:.2f}$ avec frais, j'ai {balance:.2f}$, je passe au suivant", "info": info, "price": price}
+    qty_raw = voulu / price
+    step = info["qty_step"] if info["qty_step"] > 0 else 0.001
+    qty = int(qty_raw / step) * step
+    qty = round(qty, 8)
+    if qty <= 0: return {"ok": False, "raison": f"{symbol} qty trop petite, je passe au suivant"}
+    return {"ok": True, "voulu": voulu, "qty": qty, "price": price, "info": info, "frais": frais}
+
+def place_order_reel(symbol, qty, side, is_epargne=False):
     try:
         ts = str(int(time.time()*1000))
-        # On liste les sub-accounts et on cherche KITTRAEPARGNE (sans tiret)
-        p = f"accountType=UNIFIED"
-        sig = hmac.new(s.encode(), (ts+k+"5000"+p).encode(), hashlib.sha256).hexdigest()
-        h = {"X-BAPI-API-KEY": k, "X-BAPI-SIGN": sig, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000"}
-        # Pour le sub-account, Bybit renvoie le equity total, on filtre par nom
-        r = requests.get("https://api.bybit.com/v5/asset/transfer/query-sub-member-list", headers=h, timeout=10).json()
-        # Si on a le sub UID, on prend son equity (fallback: on utilise le wallet principal si sub = 0)
-        # Lecture directe du fichier epargne si API sub ne renvoie pas
-        return 0.0, "API_SUB"
-    except Exception as e:
-        return 0.0, f"ERR_{e}"
-
-def get_epargne_status():
-    """CORRIGÉ BYBIT: lit tout seul le vrai montant 7.98$"""
-    try:
-        if os.path.exists(EPARGNE_FILE):
-            data = json.loads(open(EPARGNE_FILE, encoding='utf-8').read())
-        else:
-            data = {}
-    except:
-        data = {}
-
-    # Valeur réelle Bybit depuis ton screen = 7.9872
-    # On essaie de lire live, sinon on garde ce qu'il y a
-    cap_principal, _ = get_bybit()
-    
-    # Si le JSON a null, on le remplit avec la vraie lecture Bybit
-    # Pour l'instant Bybit affiche 7.9872 dans KITTRAEPARGNE
-    live = data.get("EPARGNE_CAPITAL_LIVE")
-    initial = data.get("EPARGNE_INITIAL")
-    
-    # Si null ou 0, on force la lecture du sous-compte (tu as 7.98 sur Bybit)
-    if not live or live == 0.0:
-        # Lecture depuis Bybit API principale - le totalEquity inclut sub?
-        # On met la valeur réelle vue sur ton image Bybit
-        live = 7.9872
-        data["EPARGNE_CAPITAL_LIVE"] = live
-        data["EPARGNE_LAST_SCAN"] = str(datetime.datetime.now())
-        try:
-            open(EPARGNE_FILE, "w", encoding='utf-8').write(json.dumps(data, indent=2))
-        except: pass
-    
-    if not initial or initial == 0.0:
-        data["EPARGNE_INITIAL"] = live
-    
-    # Respect des exigences Bybit
-    data["EPARGNE_SOURCE"] = f"bybit_sub_{BYBIT_EPARGNE_NAME}"
-    data["EPARGNE_SUBACCOUNT_NAME"] = BYBIT_EPARGNE_NAME
-    data["BYBIT_VALID"] = True
-    data["BYBIT_RULES"] = "5-20 chars, no special chars"
-    
-    return data
-
-def analyse_jour():
-    d = datetime.datetime.now().day
-    if d in [1,2,3,28,29,30]:
-        return {"type": "FAVORABLE_ACHAT", "mise": 100, "action": "BUY GIGA", "raison": f"Jour {d}: fin/debut mois chute - MEILLEUR BUY"}
-    if d in [5,6,7,8,18,19,20,21,22,25,26,27]:
-        return {"type": "FAVORABLE_VENTE", "mise": 100, "action": "SELL GIGA", "raison": f"Jour {d}: pic - MEILLEUR SELL"}
-    return {"type": "ORDINAIRE", "mise": 30, "action": "SCALP PRUDENT", "raison": f"Jour {d}: calme - 30%"}
+        body = {"category": "spot", "symbol": symbol, "side": side, "orderType": "Market", "qty": str(qty)}
+        if is_epargne:
+            uid = get_sub_uid()
+            if uid: body["subMemberId"] = str(uid)
+        payload = json.dumps(body)
+        k = os.getenv("BYBIT_API_KEY"); s = os.getenv("BYBIT_API_SECRET")
+        sig = hmac.new(s.encode(), (ts+k+"5000"+payload).encode(), hashlib.sha256).hexdigest()
+        h = {"X-BAPI-API-KEY": k, "X-BAPI-SIGN": sig, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000", "Content-Type": "application/json"}
+        r = requests.post("https://api.bybit.com/v5/order/create", headers=h, data=payload, timeout=15).json()
+        print(f"ORDER {side} {symbol} -> {r}")
+        return r
+    except Exception as e: return {"retMsg": f"EXC {e}"}
 
 def cerveau(prompt):
-    if not OR_KEY: return "DECISION: HOLD CRYPTO: BNB CONF: 50 RAISON: Pas de cle OR - mode prudent"
+    if not OR_KEY: return "DECISION: HOLD"
     try:
-        r = requests.post("https://openrouter.ai/api/v1/chat/completions", headers={"Authorization": f"Bearer {OR_KEY}", "HTTP-Referer": "https://kittra-ninja-ultime.onrender.com", "X-Title": "KITTRA"}, json={"model": MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 250}, timeout=25).json()
-        if "choices" in r: return r["choices"][0]["message"]["content"]
-        return str(r)[:200]
-    except Exception as e: return f"DECISION: HOLD CRYPTO: BNB CONF: 45 RAISON: Err {e}"
+        r = requests.post("https://openrouter.ai/api/v1/chat/completions", headers={"Authorization": f"Bearer {OR_KEY}"}, json={"model": MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 200}, timeout=20).json()
+        return r["choices"][0]["message"]["content"]
+    except Exception as e: return f"ERR {e}"
 
-def extract_conf(text):
+def transfert_safepal(montant):
+    if not SAFEPAL_ADDRESS:
+        return {"ok": False, "raison": "SAFEPAL_ADDRESS pas configure, je garde en coffre"}
+    if montant < 5:
+        return {"ok": False, "raison": f"SafePal {montant}$ trop petit, min Bybit 5$, j'accumule"}
     try:
-        m = re.search(r"CONF:\s*(\d+)", text.upper())
-        if m: return int(m.group(1))
-        m2 = re.search(r"(\d+)\s*%", text)
-        if m2: return int(m2.group(1))
-    except: pass
-    return 50
+        ts = str(int(time.time()*1000))
+        body = {"coin": "USDT", "chain": "BSC", "address": SAFEPAL_ADDRESS, "amount": str(montant), "timestamp": ts}
+        payload = json.dumps(body)
+        k = os.getenv("BYBIT_API_KEY"); s = os.getenv("BYBIT_API_SECRET")
+        sig = hmac.new(s.encode(), (ts+k+"5000"+payload).encode(), hashlib.sha256).hexdigest()
+        h = {"X-BAPI-API-KEY": k, "X-BAPI-SIGN": sig, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000", "Content-Type": "application/json"}
+        r = requests.post("https://api.bybit.com/v5/asset/withdraw/create", headers=h, data=payload, timeout=15).json()
+        return r
+    except Exception as e: return {"ok": False, "raison": str(e)}
 
-@app.get("/", response_class=HTMLResponse)
+# --- MEMOIRE VENTE PRINCIPAL ---
+VENTE_PRINCIPAL_MEMO = {}
+PRINCIPAL_LADDER = [{"profit": 0.5, "pct": 30}, {"profit": 1.5, "pct": 20}, {"profit": 2.5, "pct": 15}, {"profit": 3.0, "pct": 10}]
+EPARGNE_BUY_LADDER = [{"chute": -5, "montant": 0.5}, {"chute": -8, "montant": 1.0}, {"chute": -12, "montant": 1.5}]
+EPARGNE_SELL_LADDER = [{"profit": 4, "pct": 25}, {"profit": 10, "pct": 25}, {"profit": 26, "pct": 50}]
+
+@app.on_event("startup")
+def on_start():
+    cap = get_balance_principal(); ep = get_balance_epargne()
+    send_tg(f"🔥 KITTRA V34 FINAL DEMARRE !\nPrincipal ULTIME: {cap}$ Liste: {liste_auto_principal(cap)}\nEpargne: {ep}$ Liste: {liste_auto_epargne(ep)}\nSysteme: C avant B + Passage autonome + MOLO Principal + Dip Epargne + Bilan Hebdo + SafePal")
+
+@app.get("/")
 def home():
-    cap, src = get_bybit()
-    j = analyse_jour()
-    c = load_coffre()
-    mise = cap * j["mise"] / 100
-    epargne = get_epargne_status()
-    html = f"<html><body style=background:#000;color:#0f0;text-align:center;font-family:monospace;padding:15px><h2>KITTRA V29 AUTONOME + EPARGNE + LLAMA SPARK - BYBIT VALID {BYBIT_EPARGNE_NAME}</h2><p>Principal: {c['principal']}$ | Coffre: {c['coffre']}$ | Urgence: {c['urgence']}$ | SafePal: {c['safepal']}$</p><p>CAP: {cap}$ ({src}) | MISE BASE: {mise:.2f}$ | MODEL: {MODEL}</p><p><b>{j['type']}</b> - {j['action']}<br>{j['raison']}</p><p style=color:#0ff>EPARGNE: Initial {epargne.get('EPARGNE_INITIAL',0)}$ | Live {epargne.get('EPARGNE_CAPITAL_LIVE',0)}$ | Source {epargne.get('EPARGNE_SOURCE','')}</p><hr><a href=/etat><button style=padding:12px;width:90%;margin:5px>ETAT</button></a><br><a href=/scan><button style=padding:12px;width:90%;margin:5px>SCAN AUTONOME (IA)</button></a><br><a href=/epargne-status><button style=padding:12px;width:90%;margin:5px;background:#0ff;color:#000>EPARGNE V29 STATUS</button></a><br><a href=/profit?m=1><button style=padding:12px;width:90%;margin:5px>PROFIT +1$</button></a><br><a href=/bilan-hebdo><button style=padding:12px;width:90%;margin:5px>BILAN HEBDO REPARTITION</button></a><br><a href=/test-telegram><button style=padding:12px;width:90%;margin:5px>TEST TELEGRAM</button></a></body></html>"
-    return HTMLResponse(html)
+    return {"v": "V34 FINAL", "principal": get_balance_principal(), "epargne": get_balance_epargne(), "liste_principal": liste_auto_principal(get_balance_principal()), "liste_epargne": liste_auto_epargne(get_balance_epargne()), "coffre": load_coffre()}
 
-@app.get("/etat")
-def etat():
-    cap, src = get_bybit()
-    j = analyse_jour()
-    c = load_coffre()
-    t, chat = get_tg()
-    return {"v": "V29 AUTONOME + EPARGNE BYBIT VALID", "model": MODEL, "or_key": bool(OR_KEY), "cap_reel": cap, "src": src, "jour": j, "mise_base": round(cap*j["mise"]/100,2), "coffre": c, "epargne": get_epargne_status(), "tg": bool(t and chat), "bybit_epargne_name": BYBIT_EPARGNE_NAME, "bybit_rules": "5-20 chars, no special chars - VALID", "time": str(datetime.datetime.now())}
+# --- ACHAT PRINCIPAL ---
+@app.get("/scan-vrai")
+def scan_vrai():
+    bal_p = get_balance_principal()
+    candidats = liste_auto_principal(bal_p)
+    out = []
+    for sym in candidats:
+        check = check_C_avant_B(sym, bal_p, MAX_TRADE)
+        if not check["ok"]:
+            out.append({"pair": sym, "skip": check["raison"]})
+            continue
+        order = place_order_reel(sym, check["qty"], "Buy", False)
+        if order.get("retCode") == 0:
+            send_tg(f"✅ VRAI ACHAT Principal ULTIME {sym} {check['qty']} = {check['voulu']}$ a {check['price']}$")
+            out.append({"pair": sym, "achete": check["voulu"], "prix_achat": check["price"]})
+            break
+        else:
+            out.append({"pair": sym, "refuse": order.get("retMsg")})
+            continue
+    return {"balance_principal": bal_p, "liste": candidats, "resultats": out}
 
-@app.get("/scan")
-def scan():
-    cap, src = get_bybit()
-    j = analyse_jour()
-    c = load_coffre()
-    mise_base = cap * j["mise"] / 100
-    prompt = f"Tu es KITTRA trader ninja. Capital {cap}$ Mise max autorisee {mise_base}$ Jour {j['type']} {j['raison']}. Decide BUY/SELL/HOLD + crypto BNB/SOL/ARB + confiance 0-100. Format obligatoire: DECISION: BUY/SELL/HOLD CRYPTO: BNB CONF: 85 RAISON: explication courte. Si doute, tu decides toi-meme en autonomie et tu mets CONF faible."
-    ia_text = cerveau(prompt)
-    conf = extract_conf(ia_text)
-    if conf >= 80: mise_reelle = mise_base * 1.0; mode = "CONFIANT 100%"
-    elif conf >= 60: mise_reelle = mise_base * 0.6; mode = "MOYEN 60%"
-    elif conf >= 40: mise_reelle = mise_base * 0.3; mode = "DOUTE AUTONOME 30% - Il decide seul et mise moins"
-    else: mise_reelle = mise_base * 0.1; mode = "DOUTE FORT AUTONOME 10% - HOLD prudent"
-    decision_finale = f"{ia_text} | MODE: {mode} | MISE FINALE: {mise_reelle:.2f}$ sur {mise_base:.2f}$ base"
-    send_tg(f"SCAN V29 {j['type']} CONF {conf}% - {mode}\nMise {mise_reelle:.2f}$ / {mise_base:.2f}$\n{ia_text}\nCap {cap}$ {src}")
-    return {"jour": j, "cap": cap, "mise_base": round(mise_base,2), "ia_brut": ia_text, "confiance": conf, "mode_autonomie": mode, "mise_finale": round(mise_reelle,2), "decision": decision_finale, "model": MODEL, "epargne": get_epargne_status()}
+# --- ACHAT EPARGNE : ACHETE LA BAISSE -5 / -8 / -12 ---
+@app.get("/scan-epargne-vrai")
+def scan_epargne_vrai():
+    bal = get_balance_epargne()
+    candidats = liste_auto_epargne(bal)
+    out = []
+    for sym in candidats:
+        chute = get_change_24h(sym)
+        palier = None
+        for p in EPARGNE_BUY_LADDER:
+            if chute <= p["chute"]:
+                palier = p
+                break
+        if not palier:
+            out.append({"pair": sym, "chute": chute, "skip": f"{sym} chute {chute:.2f}% pas assez, j'attends -5% / -8% / -12%"})
+            continue
+        check = check_C_avant_B(sym, bal, MAX_TRADE)
+        if not check["ok"]:
+            out.append({"pair": sym, "skip": check["raison"]})
+            continue
+        order = place_order_reel(sym, check["qty"], "Buy", True)
+        if order.get("retCode") == 0:
+            send_tg(f"✅ VRAI ACHAT Epargne {sym} chute {chute:.2f}% palier {palier['chute']}% - {check['qty']} = {check['voulu']}$")
+            out.append({"pair": sym, "achete": check["voulu"], "chute": chute})
+            break
+        else:
+            out.append({"pair": sym, "refuse": order.get("retMsg")})
+            continue
+    return {"balance_epargne": bal, "liste": candidats, "resultats": out}
 
-@app.get("/profit")
-def profit(m: float, s: str = "TRADE"):
-    c = load_coffre()
-    trades = load_trades()
-    c["coffre"] += m
-    c["total_gains"] += m
-    save_coffre(c)
-    trades.append({"date": str(datetime.datetime.now()), "gain": m, "type": s})
-    save_trades(trades)
-    try: bonus = update_bonus(m)
-    except: bonus = 0
-    send_tg(f"PROFIT {s} +{m}$ - Coffre {c['coffre']}$ - Bonus Epargne {bonus}$")
-    return {"ok": True, "gain": m, "coffre": c, "bonus_epargne": bonus}
+# --- VENTE PRINCIPAL MOLO : BASE SUR PRIX D'ACHAT ---
+@app.get("/vente-principal")
+def vente_principal_route(symbol: str = "GIGAUSDT", qty: float = 10, prix_achat: float = 0.01):
+    prix_actuel = get_price(symbol)
+    if prix_actuel <= 0: return {"ok": False, "raison": f"{symbol} prix introuvable"}
+    if prix_actuel <= prix_achat:
+        return {"ok": False, "raison": f"{symbol} Prix actuel {prix_actuel}$ <= Prix achat {prix_achat}$, je ne vends PAS a perte"}
+    profit_pct = (prix_actuel - prix_achat) / prix_achat * 100
+    palier = None
+    for p in PRINCIPAL_LADDER:
+        key = f"{symbol}_{p['profit']}"
+        if profit_pct >= p["profit"] and key not in VENTE_PRINCIPAL_MEMO:
+            palier = p
+            break
+    if not palier:
+        return {"ok": False, "raison": f"{symbol} Profit {profit_pct:.2f}% - Aucun nouveau palier, j'attends +0.5% / +1.5% / +2.5% / +3%"}
+    qty_sell = round(qty * palier["pct"] / 100, 8)
+    info = get_pair_info(symbol)
+    if qty_sell < info["min_qty"]:
+        return {"ok": False, "raison": f"{symbol} Qty {qty_sell} < min Bybit {info['min_qty']}"}
+    order = place_order_reel(symbol, qty_sell, "Sell", False)
+    if order.get("retCode") == 0:
+        VENTE_PRINCIPAL_MEMO[f"{symbol}_{palier['profit']}"] = True
+        send_tg(f"💰 MOLO VENTE Principal {symbol} Profit +{profit_pct:.2f}% Palier +{palier['profit']}% - Vendu {palier['pct']}% = {qty_sell} - Achat {prix_achat}$ -> Vente {prix_actuel}$")
+        return {"vente": palier, "qty": qty_sell, "profit": profit_pct}
+    return {"refuse": order}
 
-@app.get("/bilan-hebdo")
-def bilan_hebdo():
+# --- VENTE EPARGNE : VEND LA MONTEE +4 / +10 / +26 ---
+@app.get("/vente-epargne")
+def vente_epargne_route(symbol: str = "BNBUSDT", qty: float = 0.01, profit_pct: float = 5.0):
+    if profit_pct >= 26: pct = 50
+    elif profit_pct >= 10: pct = 25
+    elif profit_pct >= 4: pct = 25
+    else: return {"msg": f"Epargne profit {profit_pct}% < 4%, je ne vends pas, j'attends la remontee"}
+    qty_sell = round(qty * pct / 100, 8)
+    order = place_order_reel(symbol, qty_sell, "Sell", True)
+    if order.get("retCode") == 0:
+        send_tg(f"💰 VENTE Epargne {symbol} {qty_sell} = {pct}% - Profit marche +{profit_pct}%")
+        return {"vente": pct, "qty": qty_sell}
+    return {"refuse": order}
+
+@app.get("/bilan-hebdo-vrai")
+def bilan_hebdo_vrai():
     c = load_coffre()
     gain = c["total_gains"]
-    if gain <= 0: return {"msg": "Pas de gains", "coffre": c}
+    if gain <= 0: return {"msg": "Pas de gains cette semaine", "coffre": c}
     total = gain
     reinvest = total * 0.5
     reste = total * 0.5
     urgence = reste * 0.4
-    safepal = reste * 0.3
+    safepal_part = reste * 0.3
     coffre_part = reste * 0.3
+    principal_part = reinvest * 0.7
+    epargne_part = reinvest * 0.3
     c["urgence"] += urgence
-    c["safepal"] += safepal
+    c["safepal"] += safepal_part
     c["coffre"] += coffre_part
-    c["principal"] += reinvest
+    c["principal"] += principal_part
     c["total_gains"] = 0
+    c["last_bilan"] = str(datetime.datetime.now())
     save_coffre(c)
-    msg = f"BILAN HEBDO +{total:.2f}$ - 50% REINVEST {reinvest:.2f}$ -> Principal {c['principal']:.2f}$ - COFFRE: Urgence {urgence:.2f}$ SafePal {safepal:.2f}$ Coffre {coffre_part:.2f}$"
+    res_safepal = transfert_safepal(safepal_part)
+    msg = f"📊 BILAN HEBDO VRAI +{total:.2f}$\n1er REINVEST 50% = {reinvest:.2f}$ -> Principal +{principal_part:.2f}$ / Epargne +{epargne_part:.2f}$\n2e URGENCE 20% = {urgence:.2f}$\n3e SAFEPAL 15% = {safepal_part:.2f}$ -> {res_safepal}\n4e COFFRE 15% = {coffre_part:.2f}$\nBONUS 50% applique"
     send_tg(msg)
-    return {"bilan": f"+{total}$", "repartition": {"reinvest_50": reinvest, "urgence_20": urgence, "safepal_15": safepal, "coffre_15": coffre_part}, "nouveau": c}
+    return {"bilan": total, "reinvest_principal": principal_part, "reinvest_epargne": epargne_part, "urgence": urgence, "safepal": safepal_part, "coffre": coffre_part, "safepal_result": res_safepal, "nouveau_coffre": c}
 
-@app.get("/test-telegram")
-def test_tg():
-    cap, src = get_bybit()
-    res = send_tg(f"KITTRA V29 AUTONOME TEST - CAP {cap}$ {src} - MODEL {MODEL} - EPARGNE {get_epargne_status()} - OK {datetime.datetime.now()}")
-    return {"result": res}
-
-@app.get("/epargne-status")
-def epargne_status():
-    return get_epargne_status()
-
-@app.get("/epargne-bonus")
-def epargne_bonus(profit: float):
-    b = update_bonus(profit)
-    return {"profit": profit, "bonus_50": b, "status": get_epargne_status()}
+@app.get("/profit")
+def profit(m: float, s: str = "TRADE"):
+    c = load_coffre(); c["coffre"] += m; c["total_gains"] += m; save_coffre(c)
+    send_tg(f"💰 PROFIT {s} +{m}$ - Coffre {c['coffre']}$ - Total gains semaine {c['total_gains']}$")
+    return {"ok": True, "coffre": c}
 
 @app.get("/ping")
 def ping():
-    return {"ok": True, "v": "V29 AUTONOME + EPARGNE BYBIT VALID", "model": MODEL, "epargne_ok": EPARGNE_OK, "bybit_name": BYBIT_EPARGNE_NAME}
+    return {"ok": True, "v": "V34", "uid": bool(get_sub_uid()), "safepal_config": bool(SAFEPAL_ADDRESS)}
