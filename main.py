@@ -4,15 +4,25 @@ import os, json, time, hmac, hashlib, requests, datetime
 app = FastAPI()
 COFFRE_FILE = "coffre_tresor.json"
 EPARGNE_FILE = "json_epargne.json"
+EPARGNE_BONUS_FILE = "bonus_epargne_semaine.json"
 MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/muse-spark-1.3")
 OR_KEY = os.getenv("OPENROUTER_API_KEY")
 MAX_TRADE = 2.0
 MAX_TRADE_BYBIT = 5.0
 SAFEPAL_ADDRESS = os.getenv("SAFEPAL_ADDRESS", "")
-
-# VRAIS SOLDES VERIFIES SUR TES IMAGES BYBIT
 VRAI_PRINCIPAL = 9.30
 VRAI_EPARGNE = 7.991064
+
+# --- MODE = LE ROLE DE CE SERVICE ---
+# Sur kittra-ninja-ultime : MODE = PRINCIPAL
+# Sur kittraepagne : MODE = EPARGNE
+MODE = os.getenv("MODE", "PRINCIPAL").upper()
+
+def je_suis_principal():
+    return MODE == "PRINCIPAL"
+
+def je_suis_epargne():
+    return MODE == "EPARGNE"
 
 def get_tg():
     t = os.getenv("TG_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
@@ -39,13 +49,30 @@ def load_coffre():
 def save_coffre(d):
     open(COFFRE_FILE, "w").write(json.dumps(d))
 
+def load_bonus_epargne():
+    try:
+        if os.path.exists(EPARGNE_BONUS_FILE):
+            return json.loads(open(EPARGNE_BONUS_FILE).read())
+    except: pass
+    return {"bonus_semaine": 0.0, "nb_ventes": 0, "derniere_vente": "", "semaine_debut": datetime.date.today().isoformat()}
+
+def save_bonus_epargne(d):
+    open(EPARGNE_BONUS_FILE, "w").write(json.dumps(d))
+
+def ajouter_bonus_epargne(profit_dollars, symbol, profit_pct):
+    d = load_bonus_epargne()
+    d["bonus_semaine"] = round(d["bonus_semaine"] + profit_dollars, 4)
+    d["nb_ventes"] += 1
+    d["derniere_vente"] = f"{symbol} +{profit_pct:.2f}% = +{profit_dollars:.4f}$ le {datetime.date.today().isoformat()}"
+    save_bonus_epargne(d)
+    return d
+
 def bybit_sign(params):
     k = os.getenv("BYBIT_API_KEY"); s = os.getenv("BYBIT_API_SECRET")
     ts = str(int(time.time()*1000))
     sig = hmac.new(s.encode(), (ts+k+"5000"+params).encode(), hashlib.sha256).hexdigest()
     return {"X-BAPI-API-KEY": k, "X-BAPI-SIGN": sig, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000"}
 
-# --- CORRECTION 1 : PRINCIPAL SOMME UNIFIED + SPOT + FUND ---
 def get_balance_principal():
     total = 0.0
     vu = set()
@@ -58,7 +85,6 @@ def get_balance_principal():
             for coin in lst[0].get("coin", []):
                 name = coin.get("coin", "")
                 usd = float(coin.get("usdValue", 0) or 0)
-                # Evite de compter 2 fois la meme piece si Bybit la renvoie dans 2 comptes
                 key = f"{name}_{usd}"
                 if key in vu: continue
                 vu.add(key)
@@ -69,23 +95,18 @@ def get_balance_principal():
         return round(total, 4)
     return VRAI_PRINCIPAL
 
-# --- CORRECTION 2 : TROUVE LE SOUS-COMPTE MEME SANS LE R ---
 def get_sub_uid():
     try:
         r = requests.get("https://api.bybit.com/v5/asset/transfer/query-sub-member-list", headers=bybit_sign(""), timeout=10).json()
         lst = r.get("result", {}).get("subMemberList", [])
-        print(f"DEBUG SOUS-COMPTES = {lst}")
         if not lst:
             return None
         for sub in lst:
             name = str(sub.get("subMemberName", "")).upper()
             nick = str(sub.get("nickname", "")).upper()
             user = str(sub.get("username", "")).upper()
-            # Ton vrai nom est KITTRAEPAGNE sans R, on accepte avec ou sans R
             if "KITTRA" in name or "KITTRA" in nick or "KITTRA" in user or "EPAGNE" in name or "EPAGNE" in nick or "EPARGNE" in name or "EPARGNE" in nick:
-                print(f"DEBUG UID TROUVE = {sub.get('uid')} pour {name} / {nick}")
                 return sub.get("uid")
-        # Si un seul sous-compte, on le prend direct
         if len(lst) == 1:
             return lst[0].get("uid")
         return lst[0].get("uid")
@@ -95,7 +116,6 @@ def get_sub_uid():
 
 def get_balance_epargne():
     uid = get_sub_uid()
-    print(f"DEBUG UID EPARGNE = {uid}")
     if not uid:
         try:
             if os.path.exists(EPARGNE_FILE):
@@ -156,12 +176,13 @@ def liste_auto_epargne(capital):
     if capital >= 20: base += ["SHIBUSDT", "ZECUSDT", "ONDOUSDT", "QNTUSDT", "ETHUSDT"]
     return base
 
+# --- C AVANT B : Check avant Buy ---
 def check_C_avant_B(symbol, balance, voulu):
     info = get_pair_info(symbol); price = get_price(symbol)
     if price <= 0: return {"ok": False, "raison": f"{symbol} prix introuvable, je passe au suivant"}
     min_notional = info["min_notional"]
     if voulu < min_notional:
-        if min_notional <= balance and min_notional <= MAX_TRADE_BYBIT:
+        if min_notional <= balance and min_notional <= 10:
             voulu = min_notional
         else:
             return {"ok": False, "raison": f"{symbol} demande {min_notional}$, j'ai {balance:.2f}$, je passe au suivant", "info": info, "price": price}
@@ -191,6 +212,7 @@ def place_order_reel(symbol, qty, side, is_epargne=False):
         return r
     except Exception as e: return {"retMsg": f"EXC {e}"}
 
+# --- CERVEAU = Muse Spark 1.3 - Les 2 l'utilisent ---
 def cerveau(prompt):
     if not OR_KEY: return "DECISION: HOLD"
     try:
@@ -205,149 +227,205 @@ def transfert_safepal(montant):
         return {"ok": False, "raison": f"SafePal {montant}$ trop petit, min Bybit 5$, j'accumule"}
     try:
         ts = str(int(time.time()*1000))
-        body = {"coin": "USDT", "chain": "BSC", "address": SAFEPAL_ADDRESS, "amount": str(montant), "timestamp": ts}
+        body = {"coin": "USDT", "chain": "BSC", "address": SAFEPAL_ADDRESS, "amount": str(montant)}
         payload = json.dumps(body)
         k = os.getenv("BYBIT_API_KEY"); s = os.getenv("BYBIT_API_SECRET")
         sig = hmac.new(s.encode(), (ts+k+"5000"+payload).encode(), hashlib.sha256).hexdigest()
         h = {"X-BAPI-API-KEY": k, "X-BAPI-SIGN": sig, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000", "Content-Type": "application/json"}
         r = requests.post("https://api.bybit.com/v5/asset/withdraw/create", headers=h, data=payload, timeout=15).json()
         return r
-    except Exception as e: return {"ok": False, "raison": str(e)}
+    except Exception as e: return {"retMsg": f"EXC {e}"}
 
+# --- MEMO VENTE : Ne pas revendre 2 fois le meme palier ---
 VENTE_PRINCIPAL_MEMO = {}
-PRINCIPAL_LADDER = [{"profit": 0.5, "pct": 30}, {"profit": 1.5, "pct": 20}, {"profit": 2.5, "pct": 15}, {"profit": 3.0, "pct": 10}]
-EPARGNE_BUY_LADDER = [{"chute": -5, "montant": 0.5}, {"chute": -8, "montant": 1.0}, {"chute": -12, "montant": 1.5}]
+EPARGNE_VENTE_MEMO = {}
+PRINCIPAL_SELL_LADDER = [{"profit": 0.5, "pct": 30}, {"profit": 1.5, "pct": 20}, {"profit": 2.5, "pct": 15}, {"profit": 3, "pct": 10}]
 EPARGNE_SELL_LADDER = [{"profit": 4, "pct": 25}, {"profit": 10, "pct": 25}, {"profit": 26, "pct": 50}]
-
-@app.on_event("startup")
-def on_start():
-    cap = get_balance_principal(); ep = get_balance_epargne()
-    send_tg(f"🔥 KITTRA V35 FINAL DEMARRE !\nPrincipal ULTIME: {cap}$ Liste: {liste_auto_principal(cap)}\nEpargne KITTRAEPAGNE: {ep}$ Liste: {liste_auto_epargne(ep)}\nSysteme: C avant B + Passage autonome + MOLO Principal + Dip Epargne + Bilan Hebdo + SafePal")
 
 @app.get("/")
 def home():
-    return {"v": "V35 FINAL CORRIGE", "principal": get_balance_principal(), "epargne": get_balance_epargne(), "total_2_comptes": round(get_balance_principal() + get_balance_epargne(), 4), "liste_principal": liste_auto_principal(get_balance_principal()), "liste_epargne": liste_auto_epargne(get_balance_epargne()), "coffre": load_coffre()}
+    bal_p = get_balance_principal()
+    bal_e = get_balance_epargne()
+    bonus = load_bonus_epargne()
+    return {"mode": MODE, "principal": bal_p, "epargne": bal_e, "total_2_comptes": round(bal_p + bal_e, 4), "wallet_bonus_epargne_semaine": bonus["bonus_semaine"], "nb_ventes_epargne_semaine": bonus["nb_ventes"], "msg": "KITTRA V38 - MODE, Les 2 utilisent le cerveau, C avant B, Vente qui monte meme si je dors, Bonus Epargne dans son wallet perso, Repartition Dimanche"}
 
+@app.get("/ping")
+def ping():
+    bal_p = get_balance_principal()
+    bal_e = get_balance_epargne()
+    uid = get_sub_uid()
+    return {"ok": True, "mode": MODE, "uid_trouve": bool(uid), "uid": uid, "principal": bal_p, "epargne": bal_e, "total": round(bal_p + bal_e, 4), "bonus_epargne_semaine": load_bonus_epargne()}
+
+# --- TRADE MOLO PRINCIPAL : Cerveau + C avant B ---
 @app.get("/scan-vrai")
 def scan_vrai():
+    if not je_suis_principal():
+        return {"ok": False, "raison": "Je suis KITTRA EPARGNE, je ne trade PAS le Principal. Va sur kittra-ninja-ultime."}
     bal_p = get_balance_principal()
     candidats = liste_auto_principal(bal_p)
     out = []
     for sym in candidats:
-        check = check_C_avant_B(sym, bal_p, MAX_TRADE)
+        chute = get_change_24h(sym)
+        price = get_price(sym)
+        decision = cerveau(f"Principal {sym} prix {price} chute 24h {chute:.2f}% solde {bal_p}$. Tu es le cerveau Principal. Dis-moi si j'achete maintenant ? Reponds BUY si oui, HOLD ou SELL si non, avec 1 phrase de raison. Dis-moi aussi si cette crypto monte tres souvent dans la semaine ou si elle est en train de mourir.")
+        if "BUY" not in decision.upper():
+            out.append({"pair": sym, "skip": f"Cerveau Principal dit {decision[:150]}"})
+            continue
+        info = get_pair_info(sym)
+        voulu = info["min_notional"]
+        check = check_C_avant_B(sym, bal_p, voulu)
         if not check["ok"]:
             out.append({"pair": sym, "skip": check["raison"]})
             continue
         order = place_order_reel(sym, check["qty"], "Buy", False)
         if order.get("retCode") == 0:
-            send_tg(f"✅ VRAI ACHAT Principal ULTIME {sym} {check['qty']} = {check['voulu']}$ a {check['price']}$")
-            out.append({"pair": sym, "achete": check["voulu"], "prix_achat": check["price"]})
+            send_tg(f"✅ VRAI ACHAT Principal {sym} {check['voulu']}$ - Cerveau : {decision[:150]} - C avant B OK : solde {bal_p}$ >= {check['voulu'] + check['frais']:.2f}$ avec frais, minimum Bybit {info['min_notional']}$")
+            out.append({"pair": sym, "achete": check["voulu"], "price": price, "cerveau": decision[:150]})
             break
         else:
             out.append({"pair": sym, "refuse": order.get("retMsg")})
             continue
     return {"balance_principal": bal_p, "liste": candidats, "resultats": out}
 
+# --- TRADE EPARGNE : Cerveau + Chute = Signal + C avant B ---
 @app.get("/scan-epargne-vrai")
 def scan_epargne_vrai():
+    if not je_suis_epargne():
+        return {"ok": False, "raison": "Je suis KITTRA Principal, je ne trade PAS l'Epargne. Va sur kittraepagne."}
     bal = get_balance_epargne()
     candidats = liste_auto_epargne(bal)
     out = []
     for sym in candidats:
         chute = get_change_24h(sym)
-        palier = None
-        for p in EPARGNE_BUY_LADDER:
-            if chute <= p["chute"]:
-                palier = p
-                break
-        if not palier:
-            out.append({"pair": sym, "chute": chute, "skip": f"{sym} chute {chute:.2f}% pas assez, j'attends -5% / -8% / -12%"})
+        price = get_price(sym)
+        if chute > -5:
+            out.append({"pair": sym, "chute": chute, "skip": f"{sym} chute {chute:.2f}% pas assez, j'attends -5% pour demander au cerveau"})
             continue
-        check = check_C_avant_B(sym, bal, MAX_TRADE)
+        decision = cerveau(f"Epargne {sym} prix {price} chute 24h {chute:.2f}% solde {bal}$. Tu es le cerveau Epargne. Dis-moi : Est-ce que cette crypto chute puis remonte vite en boucle dans la semaine ? Ou est-ce qu'elle ne fait que chuter et ne remonte jamais ? Ou est-ce qu'elle est en train de mourir ? Reponds par : ACHETER_CHUTE_REMONTEE_VITE si elle chute puis remonte vite, ou NE_PAS_ACHETER_MOURIR si elle ne remonte jamais ou si elle meurt. Donne aussi 1 phrase de raison.")
+        print(f"CERVEAU EPARGNE {sym} -> {decision}")
+        texte = decision.upper()
+        if "NE_PAS_ACHETER" in texte or "MOURIR" in texte or "MORT" in texte or "NE_REMONTE_JAMAIS" in texte or "CHUTE_SANS_REMONTEE" in texte or "DANGER" in texte:
+            out.append({"pair": sym, "chute": chute, "skip": f"Cerveau Epargne refuse {sym} : {decision[:150]} - Il ne fait que chuter ou il est en train de mourir, je protege mon Epargne, je passe au suivant"})
+            continue
+        if "ACHETER" not in texte and "REMONT" not in texte and "BUY" not in texte:
+            out.append({"pair": sym, "chute": chute, "skip": f"Cerveau Epargne pas sur pour {sym} : {decision[:150]} - Je ne buy pas, je passe au suivant"})
+            continue
+        info = get_pair_info(sym)
+        min_bybit = info["min_notional"]
+        voulu = min_bybit
+        if min_bybit <= 1.0:
+            voulu = 1.5
+        check = check_C_avant_B(sym, bal, voulu)
         if not check["ok"]:
-            out.append({"pair": sym, "skip": check["raison"]})
+            out.append({"pair": sym, "chute": chute, "skip": check["raison"]})
             continue
         order = place_order_reel(sym, check["qty"], "Buy", True)
         if order.get("retCode") == 0:
-            send_tg(f"✅ VRAI ACHAT Epargne {sym} chute {chute:.2f}% palier {palier['chute']}% - {check['qty']} = {check['voulu']}$")
-            out.append({"pair": sym, "achete": check["voulu"], "chute": chute})
+            send_tg(f"✅ VRAI ACHAT Epargne {sym} chute {chute:.2f}% - J'ai achete {check['voulu']}$ - Cerveau : {decision[:150]} - C avant B OK : solde {bal}$ >= {check['voulu'] + check['frais']:.2f}$ avec frais, minimum Bybit {min_bybit}$")
+            out.append({"pair": sym, "achete": check["voulu"], "chute": chute, "min_bybit": min_bybit, "frais": check["frais"], "cerveau": decision[:150]})
             break
         else:
             out.append({"pair": sym, "refuse": order.get("retMsg")})
             continue
     return {"balance_epargne": bal, "liste": candidats, "resultats": out}
 
+# --- VENTE MOLO PRINCIPAL : A partir de +0.5% qui monte, meme si je dors ---
 @app.get("/vente-principal")
 def vente_principal_route(symbol: str = "GIGAUSDT", qty: float = 10, prix_achat: float = 0.01):
+    if not je_suis_principal():
+        return {"ok": False, "raison": "Je suis KITTRA EPARGNE, je ne vends PAS le Principal."}
     prix_actuel = get_price(symbol)
-    if prix_actuel <= 0: return {"ok": False, "raison": f"{symbol} prix introuvable"}
     if prix_actuel <= prix_achat:
-        return {"ok": False, "raison": f"{symbol} Prix actuel {prix_actuel}$ <= Prix achat {prix_achat}$, je ne vends PAS a perte"}
+        return {"ok": False, "raison": f"MOLO : Prix actuel {prix_actuel}$ <= Prix achat {prix_achat}$, je ne vends PAS a perte"}
     profit_pct = (prix_actuel - prix_achat) / prix_achat * 100
-    palier = None
-    for p in PRINCIPAL_LADDER:
+    if profit_pct < 0.5:
+        return {"msg": f"MOLO {symbol} profit {profit_pct:.2f}% < 0.5%, je ne vends pas, j'attends"}
+    pct_a_vendre = 0
+    paliers = []
+    for p in PRINCIPAL_SELL_LADDER:
         key = f"{symbol}_{p['profit']}"
         if profit_pct >= p["profit"] and key not in VENTE_PRINCIPAL_MEMO:
-            palier = p
-            break
-    if not palier:
-        return {"ok": False, "raison": f"{symbol} Profit {profit_pct:.2f}% - Aucun nouveau palier, j'attends +0.5% / +1.5% / +2.5% / +3%"}
-    qty_sell = round(qty * palier["pct"] / 100, 8)
-    info = get_pair_info(symbol)
-    if qty_sell < info["min_qty"]:
-        return {"ok": False, "raison": f"{symbol} Qty {qty_sell} < min Bybit {info['min_qty']}"}
+            pct_a_vendre += p["pct"]
+            paliers.append(p)
+            VENTE_PRINCIPAL_MEMO[key] = True
+    if pct_a_vendre == 0:
+        return {"msg": f"MOLO {symbol} profit {profit_pct:.2f}% - Tous les paliers deja vendus, j'attends un nouveau trade"}
+    qty_sell = round(qty * pct_a_vendre / 100, 8)
     order = place_order_reel(symbol, qty_sell, "Sell", False)
     if order.get("retCode") == 0:
-        VENTE_PRINCIPAL_MEMO[f"{symbol}_{palier['profit']}"] = True
-        send_tg(f"💰 MOLO VENTE Principal {symbol} Profit +{profit_pct:.2f}% Palier +{palier['profit']}% - Vendu {palier['pct']}% = {qty_sell} - Achat {prix_achat}$ -> Vente {prix_actuel}$")
-        return {"vente": palier, "qty": qty_sell, "profit": profit_pct}
+        send_tg(f"💰 VENTE MOLO Principal {symbol} {qty_sell} = {pct_a_vendre}% - Profit +{profit_pct:.2f}% - Paliers : {paliers} - Meme si je me suis reveille tard, je vends a partir de +0.5%")
+        return {"vente": pct_a_vendre, "qty": qty_sell, "profit": profit_pct, "paliers": paliers}
+    for p in paliers:
+        VENTE_PRINCIPAL_MEMO.pop(f"{symbol}_{p['profit']}", None)
     return {"refuse": order}
 
+# --- VENTE EPARGNE : A partir de +4% qui monte + Bonus dans son wallet perso ---
 @app.get("/vente-epargne")
-def vente_epargne_route(symbol: str = "BNBUSDT", qty: float = 0.01, profit_pct: float = 5.0):
-    if profit_pct >= 26: pct = 50
-    elif profit_pct >= 10: pct = 25
-    elif profit_pct >= 4: pct = 25
-    else: return {"msg": f"Epargne profit {profit_pct}% < 4%, je ne vends pas, j'attends la remontee"}
-    qty_sell = round(qty * pct / 100, 8)
+def vente_epargne_route(symbol: str = "BNBUSDT", qty: float = 0.01, profit_pct: float = 5.0, prix_achat: float = 0.0):
+    if not je_suis_epargne():
+        return {"ok": False, "raison": "Je suis KITTRA Principal, je ne vends PAS l'Epargne."}
+    if profit_pct < 4:
+        return {"msg": f"Epargne {symbol} profit {profit_pct:.2f}% < 4%, je ne vends pas, j'attends la remontee"}
+    pct_a_vendre = 0
+    paliers = []
+    for p in EPARGNE_SELL_LADDER:
+        key = f"{symbol}_{p['profit']}"
+        if profit_pct >= p["profit"] and key not in EPARGNE_VENTE_MEMO:
+            pct_a_vendre += p["pct"]
+            paliers.append(p)
+            EPARGNE_VENTE_MEMO[key] = True
+    if pct_a_vendre == 0:
+        return {"msg": f"Epargne {symbol} profit {profit_pct:.2f}% - Tous les paliers deja vendus, j'attends un nouveau trade"}
+    qty_sell = round(qty * pct_a_vendre / 100, 8)
     order = place_order_reel(symbol, qty_sell, "Sell", True)
     if order.get("retCode") == 0:
-        send_tg(f"💰 VENTE Epargne {symbol} {qty_sell} = {pct}% - Profit marche +{profit_pct}%")
-        return {"vente": pct, "qty": qty_sell}
+        prix_actuel = get_price(symbol)
+        if prix_achat > 0:
+            profit_dollars = round(qty_sell * prix_actuel - qty_sell * prix_achat, 4)
+        else:
+            profit_dollars = round(qty_sell * prix_actuel * profit_pct / 100, 4)
+        if profit_dollars > 0:
+            bonus = ajouter_bonus_epargne(profit_dollars, symbol, profit_pct)
+            send_tg(f"💰 VENTE Epargne {symbol} {qty_sell} = {pct_a_vendre}% - Profit +{profit_pct:.2f}% - Paliers : {paliers} - Bonus +{profit_dollars}$ -> Wallet Bonus Epargne perso = {bonus['bonus_semaine']}$ total semaine ({bonus['nb_ventes']} ventes). Dimanche je fais la repartition.")
+        else:
+            send_tg(f"💰 VENTE Epargne {symbol} {qty_sell} = {pct_a_vendre}% - Profit +{profit_pct:.2f}% - Paliers : {paliers}")
+        return {"vente": pct_a_vendre, "qty": qty_sell, "profit": profit_pct, "paliers": paliers, "bonus_dollars": profit_dollars}
+    for p in paliers:
+        EPARGNE_VENTE_MEMO.pop(f"{symbol}_{p['profit']}", None)
     return {"refuse": order}
 
+# --- BILAN HEBDO DIMANCHE : Prendre les bonus de la semaine, Repartition, Recommencer le cycle ---
 @app.get("/bilan-hebdo-vrai")
 def bilan_hebdo_vrai():
-    c = load_coffre()
-    gain = c["total_gains"]
-    if gain <= 0: return {"msg": "Pas de gains cette semaine", "coffre": c}
-    total = gain
-    reinvest = total * 0.5
-    reste = total * 0.5
-    urgence = reste * 0.4
-    safepal_part = reste * 0.3
-    coffre_part = reste * 0.3
-    principal_part = reinvest * 0.7
-    epargne_part = reinvest * 0.3
-    c["urgence"] += urgence
-    c["safepal"] += safepal_part
-    c["coffre"] += coffre_part
-    c["principal"] += principal_part
-    c["total_gains"] = 0
-    c["last_bilan"] = str(datetime.datetime.now())
-    save_coffre(c)
-    res_safepal = transfert_safepal(safepal_part)
-    msg = f"📊 BILAN HEBDO VRAI +{total:.2f}$\n1er REINVEST 50% = {reinvest:.2f}$ -> Principal +{principal_part:.2f}$ / Epargne +{epargne_part:.2f}$\n2e URGENCE 20% = {urgence:.2f}$\n3e SAFEPAL 15% = {safepal_part:.2f}$ -> {res_safepal}\n4e COFFRE 15% = {coffre_part:.2f}$\nBONUS 50% applique"
+    bonus_data = load_bonus_epargne()
+    bonus_semaine = bonus_data["bonus_semaine"]
+    if bonus_semaine <= 0:
+        return {"msg": "Pas de bonus Epargne cette semaine, Wallet Bonus = 0, je recommence le cycle."}
+    reinvest = round(bonus_semaine * 0.50, 4)
+    urgence = round(bonus_semaine * 0.20, 4)
+    safepal = round(bonus_semaine * 0.15, 4)
+    coffre_part = round(bonus_semaine * 0.15, 4)
+    reinvest_principal = round(reinvest * 0.70, 4)
+    reinvest_epargne = round(reinvest * 0.30, 4)
+    coffre = load_coffre()
+    coffre["urgence"] = round(coffre.get("urgence", 0) + urgence, 4)
+    coffre["coffre"] = round(coffre.get("coffre", 0) + coffre_part, 4)
+    coffre["total_gains"] = round(coffre.get("total_gains", 0) + bonus_semaine, 4)
+    coffre["last_bilan"] = datetime.date.today().isoformat()
+    save_coffre(coffre)
+    if safepal >= 5:
+        res = transfert_safepal(safepal)
+        safepal_msg = f"Transfert SafePal {safepal}$ : {res}"
+    else:
+        coffre["safepal"] = round(coffre.get("safepal", 0) + safepal, 4)
+        save_coffre(coffre)
+        safepal_msg = f"SafePal {safepal}$ < 5$ Bybit, j'accumule dans le coffre jusqu'a 5$. Coffre SafePal = {coffre['safepal']}$"
+    save_bonus_epargne({"bonus_semaine": 0.0, "nb_ventes": 0, "derniere_vente": "", "semaine_debut": datetime.date.today().isoformat()})
+    msg = f"📊 BILAN HEBDO DIMANCHE EPARGNE\nBonus semaine : {bonus_semaine}$ ({bonus_data['nb_ventes']} ventes)\nREINVEST 50% = {reinvest}$ (Principal {reinvest_principal}$ + Epargne {reinvest_epargne}$)\nURGENCE 20% = {urgence}$\nSAFEPAL 15% = {safepal}$ - {safepal_msg}\nCOFFRE 15% = {coffre_part}$\nWallet Bonus remis a 0, nouveau cycle Lundi."
     send_tg(msg)
-    return {"bilan": total, "reinvest_principal": principal_part, "reinvest_epargne": epargne_part, "urgence": urgence, "safepal": safepal_part, "coffre": coffre_part, "safepal_result": res_safepal, "nouveau_coffre": c}
+    return {"bonus_semaine": bonus_semaine, "reinvest": reinvest, "urgence": urgence, "safepal": safepal, "coffre": coffre_part, "msg": msg}
 
 @app.get("/profit")
-def profit(m: float, s: str = "TRADE"):
-    c = load_coffre(); c["coffre"] += m; c["total_gains"] += m; save_coffre(c)
-    send_tg(f"💰 PROFIT {s} +{m}$ - Coffre {c['coffre']}$ - Total gains semaine {c['total_gains']}$")
-    return {"ok": True, "coffre": c}
-
-@app.get("/ping")
-def ping():
-    uid = get_sub_uid()
-    return {"ok": True, "v": "V35", "uid_trouve": bool(uid), "uid": uid, "principal_reel": get_balance_principal(), "epargne_reel": get_balance_epargne(), "safepal_config": bool(SAFEPAL_ADDRESS)}
+def profit(m: float = 1.0):
+    p = round(m * 0.5, 4); u = round(m * 0.2, 4); s = round(m * 0.15, 4); c = round(m * 0.15, 4)
+    return {"profit": m, "REINVEST_50": p, "URGENCE_20": u, "SAFEPAL_15": s, "COFFRE_15": c}
